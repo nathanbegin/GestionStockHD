@@ -1,8 +1,28 @@
-# Sécurité
+# Sécurité et mise en production
 
-- Ne jamais commiter `.env` ni les clés réelles.
-- Les secrets OpenAI et Supabase restent dans les fonctions Vercel.
-- Le PIN est comparé avec `timingSafeEqual`.
-- Les images sont compressées et leur taille est limitée.
-- Supabase RLS est activé et aucun accès public n’est accordé.
-- Avant un déploiement à grande échelle, ajouter des comptes individuels, des rôles, un journal d’audit, des limites de fréquence et une politique de conservation des photos.
+## Mesures présentes
+
+- `APP_PIN` est comparé côté Vercel.
+- `SUPABASE_SECRET_KEY` et `OPENAI_API_KEY` restent uniquement côté serveur.
+- Le navigateur reçoit seulement `SUPABASE_PUBLISHABLE_KEY`, conçue pour être publique.
+- Les événements Realtime ne contiennent pas le contenu des listes; ils indiquent seulement qu’une actualisation est disponible.
+- La table `app_state` n’accorde aucun accès direct aux rôles `anon` ou `authenticated`.
+- Le bucket `stock-location-photos` est privé.
+- Les photos sont validées, compressées et limitées à 3 Mo.
+- Les photos sont affichées avec des liens signés temporaires.
+- Les chemins Storage sont validés avant lecture ou suppression.
+
+## Avant un usage réel à grande échelle
+
+Remplacez le PIN partagé par une authentification individuelle et ajoutez :
+
+- rôles employé, gestionnaire et administrateur;
+- séparation par magasin;
+- journal d’audit;
+- politiques de conservation des photos;
+- validation officielle des permis et autorisations;
+- limites de fréquence;
+- suivi des erreurs et des coûts;
+- révocation des sessions et des appareils.
+
+Ne commitez jamais un fichier `.env` réel ni les clés secrètes.

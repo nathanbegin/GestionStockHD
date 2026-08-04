@@ -4,7 +4,10 @@
   "trailingSlash": false,
   "functions": {
     "api/analyze.js": { "maxDuration": 60 },
-    "api/sync.js": { "maxDuration": 30 }
+    "api/sync.js": { "maxDuration": 30 },
+    "api/photo-upload.js": { "maxDuration": 30 },
+    "api/photo-url.js": { "maxDuration": 30 },
+    "api/photo-delete.js": { "maxDuration": 30 }
   },
   "headers": [
     {

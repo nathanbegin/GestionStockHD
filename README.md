@@ -1,96 +1,130 @@
-# Remplissage magasin — PWA pour Vercel
+# Remplissage magasin V4 — PWA Vercel + Supabase
 
-Application mobile de réapprovisionnement permettant de relever les produits manquants par photo d’étiquette ou saisie manuelle.
+Application mobile de réapprovisionnement permettant de relever les produits manquants, d’assigner le travail et de partager les changements entre plusieurs appareils.
 
-## Inclus dans cette version
+## Nouveautés de la V4
 
-- deux choix distincts sur mobile : prendre une nouvelle photo ou téléverser une photo existante;
-- lecture de codes-barres avec l’API native du navigateur lorsqu’elle est disponible;
-- analyse visuelle facultative avec OpenAI;
-- détection des numéros d’article commençant par `1000` ou `1001`, avec affichage normalisé `1001 123 456`;
-- plusieurs listes et départements;
-- quantité, priorité, statut, notes et deux emplacements;
-- recherche et filtres;
-- sélection multiple avec changement de statut, modification groupée et suppression groupée;
-- nettoyage automatique des départements et listes en doublon;
-- thème orange et icônes PWA assorties;
-- mode guidé de remplissage;
-- fonctionnement hors ligne avec PWA;
-- sauvegarde locale automatique;
-- synchronisation facultative avec Supabase;
-- export CSV et JSON, ainsi qu’import JSON.
+- envoi automatique au cloud après chaque ajout, modification, changement de statut ou suppression;
+- réception rapide des changements sur les autres appareils avec Supabase Realtime Broadcast;
+- vérification périodique toutes les 15 secondes comme solution de repli;
+- conservation locale hors ligne et nouvel essai automatique au retour du réseau;
+- gestion des employés;
+- attribution d’un article à un ou plusieurs employés;
+- déclaration du permis de chariot élévateur, numéro et date d’expiration;
+- avertissement et validation lorsqu’un article exige un lift;
+- photo de l’emplacement d’entreposage;
+- stockage privé des photos dans Supabase Storage;
+- affichage des photos avec des liens signés temporaires;
+- filtre « Mes articles » et filtre par employé.
 
-## Déploiement sur Vercel
+Les fonctions des versions précédentes demeurent présentes : lecture d’étiquette, ajout manuel, SKU `1000` ou `1001`, affichage `1001 123 456`, listes, départements, sélection multiple, mode remplissage, export et PWA.
 
-1. Décompresser le dossier et le publier dans un dépôt GitHub.
-2. Dans Vercel, choisir **Add New → Project**, puis importer le dépôt.
-3. Choisir le préréglage **Other**. Il n’y a aucune commande de compilation.
-4. Ajouter les variables d’environnement décrites dans `.env.example`.
-5. Déployer.
+## Mise à jour depuis la V3
 
-## Configuration de Supabase
+### 1. Remplacer les fichiers du dépôt
 
-1. Créer un projet Supabase.
-2. Ouvrir **SQL Editor**.
-3. Exécuter `supabase/schema.sql`.
-4. Copier l’URL du projet dans `SUPABASE_URL`.
-5. Copier une clé serveur secrète dans `SUPABASE_SECRET_KEY`.
+Décompressez cette version et remplacez le contenu du dépôt Git relié à Vercel.
 
-La table active RLS et n’accorde aucun accès direct au navigateur. La clé secrète est utilisée seulement par la fonction Vercel `/api/sync`.
+### 2. Réexécuter le SQL
 
-## Configuration de l’analyse photo
-
-Ajouter dans Vercel :
+Dans **Supabase → SQL Editor**, exécutez de nouveau :
 
 ```text
-OPENAI_API_KEY=...
-OPENAI_VISION_MODEL=gpt-5-nano
+supabase/schema.sql
 ```
 
-La photo est redimensionnée dans le navigateur avant l’envoi. La clé reste côté serveur. Le résultat doit toujours être vérifié par l’employé avant l’ajout.
+Le script est idempotent. Il conserve les données existantes et crée le bucket privé `stock-location-photos`.
 
-## PIN
+### 3. Ajouter la clé publique Supabase dans Vercel
 
-`APP_PIN` est un mot de passe partagé pour ce MVP. Utiliser une longue valeur difficile à deviner. Pour une exploitation réelle, remplacer ce PIN par une authentification individuelle avec rôles.
+Dans **Vercel → Settings → Environment Variables**, conservez les variables existantes et ajoutez :
+
+```text
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+La clé se trouve dans **Supabase → Settings → API Keys**. Utilisez la clé `Publishable`, et non la clé secrète.
+
+Variables complètes :
+
+```text
+APP_PIN=...
+OPENAI_API_KEY=...
+OPENAI_VISION_MODEL=gpt-5-nano
+SUPABASE_URL=https://VOTRE-PROJET.supabase.co
+SUPABASE_SECRET_KEY=sb_secret_...
+SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+```
+
+Mettez uniquement la valeur dans chaque champ Vercel, sans répéter le nom de la variable.
+
+### 4. Redéployer
+
+Après les variables, lancez un nouveau déploiement Vercel. Fermez ensuite complètement la PWA et rouvrez-la afin de charger le service worker `remplissage-v4`.
+
+## Fonctionnement de la synchronisation
+
+1. Une modification est enregistrée immédiatement dans le navigateur.
+2. Après environ 700 ms, l’application appelle `/api/sync`.
+3. La fonction Vercel fusionne la copie locale et la copie Supabase.
+4. Après réussite, le client envoie un événement Realtime sans données sensibles.
+5. Les autres clients reçoivent l’événement et récupèrent la nouvelle copie par `/api/sync` avec leur PIN.
+6. Si Realtime n’est pas configuré, une vérification périodique garde tout de même les clients à jour.
+
+Le bouton **Synchroniser maintenant** reste disponible pour forcer une opération.
+
+## Employés et permis de lift
+
+Dans **Réglages → Employés et permis de lift** :
+
+- ajoutez le nom de l’employé;
+- indiquez s’il possède un permis;
+- ajoutez facultativement le numéro et la date d’expiration;
+- modifiez l’employé lorsque son statut change.
+
+Un article peut être assigné à plusieurs employés. Lorsqu’il nécessite un chariot élévateur et que des employés sont assignés, l’application exige qu’au moins une personne ait un permis déclaré valide. Une fiche non assignée peut être créée, mais elle affiche alors un avertissement « permis requis ».
+
+Cette vérification est un aide-mémoire administratif. Elle ne remplace pas la validation officielle de la formation, de l’autorisation de l’employeur et des règles de sécurité applicables.
+
+## Photos d’emplacement
+
+Les photos d’emplacement sont :
+
+- compressées sur le téléphone;
+- limitées à 3 Mo côté serveur;
+- envoyées par `/api/photo-upload`;
+- conservées dans un bucket privé Supabase;
+- ouvertes au moyen d’un lien signé d’une heure obtenu par `/api/photo-url`.
+
+La clé secrète Supabase n’est jamais exposée au navigateur.
 
 ## Développement local
 
-Après installation de la CLI Vercel :
-
 ```bash
+npm install
 vercel dev
 ```
 
-## Structure
+## Structure principale
 
 ```text
-api/analyze.js        Analyse sécurisée des étiquettes
-api/sync.js           Synchronisation Supabase
-api/health.js         Vérification de configuration
-lib/auth.js           Validation du PIN
-supabase/schema.sql   Table cloud
-app.js                Application mobile
-styles.css            Interface
-sw.js                 Mode hors ligne
-manifest.webmanifest  Installation PWA
+api/analyze.js             Analyse d’étiquette
+api/sync.js                Fusion et synchronisation cloud
+api/realtime-config.js     Configuration publique Realtime après validation du PIN
+api/photo-upload.js        Téléversement privé des photos
+api/photo-url.js           Création des liens signés
+api/photo-delete.js        Suppression des photos
+lib/supabase-admin.js      Client Supabase côté serveur
+supabase/schema.sql        Table et bucket Storage
+app.js                     Interface et synchronisation automatique
+styles.css                 Interface mobile
+sw.js                      PWA hors ligne
 ```
 
-## Limites connues du MVP
+## Limites du MVP
 
-- Le PIN est partagé entre les employés.
-- La synchronisation est conçue pour un seul magasin et utilise l’identifiant `default`.
-- Les suppressions sont conservées comme marqueurs pour éviter qu’un article supprimé réapparaisse après synchronisation.
-- Les photos sont conservées seulement si l’utilisateur coche l’option; elles occupent de l’espace dans le navigateur.
-- Le catalogue officiel du magasin n’est pas encore intégré.
-
-
-## Mise à jour depuis une version précédente
-
-Après avoir remplacé les fichiers dans GitHub et redéployé sur Vercel :
-
-1. ouvrir l’application une fois en ligne afin que le nouveau service worker `remplissage-v3` s’installe;
-2. fermer complètement la PWA, puis la rouvrir;
-3. au besoin, faire un rechargement forcé du site;
-4. pour voir immédiatement la nouvelle icône orange sur certains téléphones, retirer puis réinstaller la PWA.
-
-La prochaine synchronisation nettoiera aussi les départements portant le même nom et réassignera leurs articles au département conservé.
+- le PIN demeure partagé entre les employés;
+- l’application utilise une seule copie de magasin identifiée par `default`;
+- les permis sont déclarés manuellement;
+- Realtime utilise un canal Broadcast public dont le nom est remis seulement après validation du PIN; les données elles-mêmes restent protégées derrière les fonctions Vercel;
+- pour plusieurs magasins ou des exigences d’audit, il faudra ajouter une authentification individuelle et des rôles.

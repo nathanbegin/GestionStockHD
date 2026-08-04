@@ -3,9 +3,11 @@ import { isAuthorized, json } from "../lib/auth.js";
 function latest(a, b) {
   return new Date(a?.updatedAt || 0) >= new Date(b?.updatedAt || 0) ? a : b;
 }
+
 function mergeById(local = [], cloud = []) {
   const map = new Map();
   for (const item of [...cloud, ...local]) {
+    if (!item?.id) continue;
     const existing = map.get(item.id);
     map.set(item.id, existing ? latest(item, existing) : item);
   }
@@ -33,8 +35,7 @@ function dedupeNamed(collection = []) {
     if (existing) {
       idMap.set(raw.id, existing.id);
       if (new Date(raw.updatedAt || 0) > new Date(existing.updatedAt || 0)) {
-        existing.name = name;
-        existing.updatedAt = raw.updatedAt;
+        Object.assign(existing, raw, { id: existing.id, name });
       }
       continue;
     }
@@ -60,32 +61,63 @@ function formatSku(value) {
 }
 
 function mergeSnapshots(local, cloud) {
-  const sourceCloud = cloud || { lists: [], departments: [], items: [], deletedIds: [] };
-  const deleted = new Set([...(sourceCloud.deletedIds || []), ...(local.deletedIds || [])]);
-  const lists = dedupeNamed(mergeById(local.lists, sourceCloud.lists));
-  const departments = dedupeNamed(mergeById(local.departments, sourceCloud.departments));
+  const sourceCloud = cloud || {
+    lists: [], departments: [], employees: [], items: [],
+    deletedIds: [], deletedListIds: [], deletedDepartmentIds: [], deletedEmployeeIds: []
+  };
+
+  const deletedItems = new Set([...(sourceCloud.deletedIds || []), ...(local.deletedIds || [])]);
+  const deletedLists = new Set([...(sourceCloud.deletedListIds || []), ...(local.deletedListIds || [])]);
+  const deletedDepartments = new Set([...(sourceCloud.deletedDepartmentIds || []), ...(local.deletedDepartmentIds || [])]);
+  const deletedEmployees = new Set([...(sourceCloud.deletedEmployeeIds || []), ...(local.deletedEmployeeIds || [])]);
+
+  const lists = dedupeNamed(mergeById(local.lists, sourceCloud.lists).filter(x => !deletedLists.has(x.id)));
+  const departments = dedupeNamed(mergeById(local.departments, sourceCloud.departments).filter(x => !deletedDepartments.has(x.id)));
+  const employees = dedupeNamed(mergeById(local.employees, sourceCloud.employees).filter(x => !deletedEmployees.has(x.id)));
+
   const listFallback = lists.collection[0]?.id || "";
   const departmentFallback = departments.collection[0]?.id || "";
+  const validEmployeeIds = new Set(employees.collection.map(x => x.id));
+
   const items = mergeById(local.items, sourceCloud.items)
-    .filter(x => !deleted.has(x.id))
+    .filter(x => !deletedItems.has(x.id))
     .map(item => ({
       ...item,
       sku: formatSku(item.sku),
       listId: lists.idMap.get(item.listId) || listFallback,
-      departmentId: departments.idMap.get(item.departmentId) || departmentFallback
+      departmentId: departments.idMap.get(item.departmentId) || departmentFallback,
+      assignedEmployeeIds: [...new Set((item.assignedEmployeeIds || [])
+        .map(id => employees.idMap.get(id) || id)
+        .filter(id => validEmployeeIds.has(id)))],
+      requiresForklift: Boolean(item.requiresForklift),
+      stockPhotoPath: String(item.stockPhotoPath || "")
     }));
+
+  const settingsWinner = cloud
+    ? latest(
+        { ...(cloud.settings || {}), updatedAt: cloud.meta?.updatedAt },
+        { ...(local.settings || {}), updatedAt: local.meta?.updatedAt }
+      )
+    : local.settings;
+
   return {
     version: 1,
     lists: lists.collection,
     departments: departments.collection,
+    employees: employees.collection,
     items,
-    deletedIds: [...deleted],
-    settings: cloud
-      ? latest({ ...cloud.settings, updatedAt: cloud.meta?.updatedAt }, { ...local.settings, updatedAt: local.meta?.updatedAt })
-      : local.settings,
+    deletedIds: [...deletedItems],
+    deletedListIds: [...deletedLists],
+    deletedDepartmentIds: [...deletedDepartments],
+    deletedEmployeeIds: [...deletedEmployees],
+    settings: {
+      storeName: String(settingsWinner?.storeName || "Mon magasin"),
+      keepPhotos: Boolean(settingsWinner?.keepPhotos)
+    },
     meta: { updatedAt: new Date().toISOString(), lastSyncAt: new Date().toISOString() }
   };
 }
+
 async function supabase(path, options = {}) {
   const url = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
   const key = String(process.env.SUPABASE_SECRET_KEY || "").trim();
@@ -96,25 +128,14 @@ async function supabase(path, options = {}) {
     ...(options.headers || {})
   };
 
-  // Les nouvelles clés Supabase sb_secret_* sont opaques et ne sont pas des JWT.
-  // Le header Authorization Bearer reste nécessaire seulement pour les anciennes
-  // clés service_role au format JWT (elles commencent généralement par "eyJ").
   if (!key.startsWith("sb_secret_") && !key.startsWith("sb_publishable_")) {
     headers.Authorization = `Bearer ${key}`;
   }
 
-  const response = await fetch(`${url}/rest/v1/${path}`, {
-    ...options,
-    headers
-  });
-
+  const response = await fetch(`${url}/rest/v1/${path}`, { ...options, headers });
   const text = await response.text();
   let body = null;
-  try {
-    body = text ? JSON.parse(text) : null;
-  } catch {
-    body = text;
-  }
+  try { body = text ? JSON.parse(text) : null; } catch { body = text; }
 
   if (!response.ok) {
     const message = body?.message || body?.msg || body?.error_description || body?.error || body;
@@ -126,9 +147,15 @@ async function supabase(path, options = {}) {
 export default async function handler(request, response) {
   if (request.method !== "POST") return json(response, 405, { error: "Méthode non permise" });
   if (!isAuthorized(request)) return json(response, 401, { error: "PIN invalide" });
-  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) return json(response, 503, { error: "Supabase n’est pas configuré" });
+  if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SECRET_KEY) {
+    return json(response, 503, { error: "Supabase n’est pas configuré" });
+  }
+
   const local = request.body?.snapshot;
-  if (!local || local.version !== 1 || !Array.isArray(local.items)) return json(response, 400, { error: "Données de synchronisation invalides" });
+  if (!local || local.version !== 1 || !Array.isArray(local.items)) {
+    return json(response, 400, { error: "Données de synchronisation invalides" });
+  }
+
   try {
     const rows = await supabase("app_state?id=eq.default&select=snapshot");
     const merged = mergeSnapshots(local, rows?.[0]?.snapshot || null);
@@ -139,6 +166,7 @@ export default async function handler(request, response) {
     });
     return json(response, 200, { snapshot: merged });
   } catch (error) {
+    console.error("sync", error);
     return json(response, 500, { error: error.message || "Erreur de synchronisation" });
   }
 }
