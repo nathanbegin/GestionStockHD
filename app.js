@@ -12,6 +12,8 @@ const PRIORITY_LABELS = { high: "Élevée", medium: "Normale", low: "Faible" };
 const DEFAULT_DEPARTMENTS = ["Quincaillerie", "Peinture", "Électricité", "Plomberie", "Jardinage", "Matériaux", "Cour extérieure"];
 const AUTOSYNC_DELAY = 700;
 const POLL_INTERVAL = 15000;
+const TOUR_SWIPE_MIN_DISTANCE = 56;
+const TOUR_SWIPE_MAX_DURATION = 900;
 
 const nowIso = () => new Date().toISOString();
 const makeNamedEntry = name => ({ id: crypto.randomUUID(), name, updatedAt: nowIso() });
@@ -47,6 +49,7 @@ let scanDraft = emptyScanDraft();
 let stockPhotoDraft = emptyStockPhotoDraft();
 let filters = { search: "", listId: "all", departmentId: "all", status: "open", priority: "all", employeeId: "all" };
 let tourIndex = 0;
+let tourSwipeStart = null;
 let selectedIds = new Set();
 let bulkEditOpen = false;
 let formDirty = false;
@@ -548,8 +551,21 @@ function renderBulkEditDialog() {
   </div></div>`;
 }
 
+function getTourItems() {
+  return filteredItems().filter(x => !["rempli", "introuvable"].includes(x.status));
+}
+function moveTour(delta, { fromSwipe = false } = {}) {
+  const items = getTourItems();
+  const nextIndex = tourIndex + delta;
+  if (nextIndex < 0 || nextIndex >= items.length) {
+    if (fromSwipe) toast(delta > 0 ? "Dernier article atteint" : "Premier article atteint");
+    return;
+  }
+  tourIndex = nextIndex;
+  render();
+}
 function renderTour() {
-  const items = filteredItems().filter(x => !["rempli", "introuvable"].includes(x.status));
+  const items = getTourItems();
   if (!items.length) return `<section class="section">${renderEmpty("Tournée terminée", "Aucun article ouvert ne correspond aux filtres actuels.")}<div class="button-row centered top-gap"><button class="button" data-action="go" data-view="lists">Retour aux listes</button></div></section>`;
   tourIndex = Math.max(0, Math.min(tourIndex, items.length - 1));
   const item = items[tourIndex];
@@ -565,6 +581,7 @@ function renderTour() {
     ${renderStockPhoto(item, "tour-photo")}
     ${item.note ? `<p><strong>Note :</strong> ${escapeHTML(item.note)}</p>` : ""}
     <hr><div class="button-row"><button class="button secondary" data-action="tour-status" data-status="recupere" data-id="${item.id}">Marquer récupéré</button><button class="button primary" data-action="tour-status" data-status="rempli" data-id="${item.id}">Marquer rempli</button><button class="button danger" data-action="tour-status" data-status="introuvable" data-id="${item.id}">Introuvable</button></div>
+    <p class="swipe-hint" aria-label="Navigation par balayage"><span aria-hidden="true">↔</span> Balayez à gauche ou à droite pour changer d’article</p>
     <div class="button-row between top-gap"><button class="button" data-action="tour-prev" ${tourIndex === 0 ? "disabled" : ""}>← Précédent</button><button class="button" data-action="tour-next" ${tourIndex >= items.length - 1 ? "disabled" : ""}>Suivant →</button></div>
   </article></section>`;
 }
@@ -1154,8 +1171,8 @@ els.appMain.addEventListener("click", async e => {
   }
   if (action === "cycle-status") { setStatus(btn.dataset.id, nextStatus(btn.dataset.status)); return render(); }
   if (action === "tour-status") { setStatus(btn.dataset.id, btn.dataset.status); toast(`Statut : ${STATUS_LABELS[btn.dataset.status]}`); return render(); }
-  if (action === "tour-next") { tourIndex++; return render(); }
-  if (action === "tour-prev") { tourIndex--; return render(); }
+  if (action === "tour-next") return moveTour(1);
+  if (action === "tour-prev") return moveTour(-1);
   if (action === "delete-item") {
     if (!confirm("Supprimer cet article?")) return;
     deleteItems([btn.dataset.id]);
@@ -1208,6 +1225,35 @@ els.appMain.addEventListener("click", async e => {
     return showLogin();
   }
 });
+
+const TOUR_SWIPE_IGNORE_SELECTOR = 'button, a, input, select, textarea, label, summary, details, [contenteditable="true"]';
+els.appMain.addEventListener("touchstart", e => {
+  if (currentView !== "tour" || e.touches.length !== 1) return;
+  if (!e.target.closest(".tour-card") || e.target.closest(TOUR_SWIPE_IGNORE_SELECTOR)) return;
+  const touch = e.touches[0];
+  tourSwipeStart = { x: touch.clientX, y: touch.clientY, startedAt: Date.now() };
+}, { passive: true });
+els.appMain.addEventListener("touchcancel", () => {
+  tourSwipeStart = null;
+}, { passive: true });
+els.appMain.addEventListener("touchend", e => {
+  if (!tourSwipeStart || currentView !== "tour" || !e.changedTouches.length) {
+    tourSwipeStart = null;
+    return;
+  }
+  const touch = e.changedTouches[0];
+  const deltaX = touch.clientX - tourSwipeStart.x;
+  const deltaY = touch.clientY - tourSwipeStart.y;
+  const duration = Date.now() - tourSwipeStart.startedAt;
+  tourSwipeStart = null;
+
+  const horizontalEnough = Math.abs(deltaX) >= TOUR_SWIPE_MIN_DISTANCE;
+  const mainlyHorizontal = Math.abs(deltaX) > Math.abs(deltaY) * 1.2;
+  if (!horizontalEnough || !mainlyHorizontal || duration > TOUR_SWIPE_MAX_DURATION) return;
+
+  // Un balayage vers la gauche ouvre l’article suivant; vers la droite, le précédent.
+  moveTour(deltaX < 0 ? 1 : -1, { fromSwipe: true });
+}, { passive: true });
 
 els.importInput.addEventListener("change", async e => {
   const file = e.target.files?.[0];

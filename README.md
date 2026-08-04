@@ -1,5 +1,18 @@
 # Remplissage magasin V4 — PWA Vercel + Supabase
 
+## Version 4.1 — navigation par balayage
+
+Dans l’écran de ramassage / mode remplissage :
+
+- balayage vers la gauche : article suivant;
+- balayage vers la droite : article précédent;
+- les boutons **Précédent** et **Suivant** demeurent disponibles;
+- le défilement vertical de la page reste fonctionnel;
+- un balayage commencé sur un bouton ou un champ ne déclenche pas la navigation.
+
+Aucune modification de la base Supabase n’est requise pour cette mise à jour. Le cache PWA passe à `remplissage-v4-1`; fermez puis rouvrez l’application après le déploiement.
+
+
 Application mobile de réapprovisionnement permettant de relever les produits manquants, d’assigner le travail et de partager les changements entre plusieurs appareils.
 
 ## Nouveautés de la V4
@@ -60,7 +73,7 @@ Mettez uniquement la valeur dans chaque champ Vercel, sans répéter le nom de l
 
 ### 4. Redéployer
 
-Après les variables, lancez un nouveau déploiement Vercel. Fermez ensuite complètement la PWA et rouvrez-la afin de charger le service worker `remplissage-v4`.
+Après les variables, lancez un nouveau déploiement Vercel. Fermez ensuite complètement la PWA et rouvrez-la afin de charger le service worker `remplissage-v4-1`.
 
 ## Fonctionnement de la synchronisation
 

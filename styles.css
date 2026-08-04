@@ -113,7 +113,7 @@ textarea { min-height: 90px; resize: vertical; }
 .inline-form { display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 8px; }
 .manage-list { display: grid; gap: 8px; margin-top: 12px; }
 .manage-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 11px 12px; background: #fbf7f4; border-radius: 12px; }
-.tour-card { max-width: 720px; margin: 0 auto; }
+.tour-card { max-width: 720px; margin: 0 auto; touch-action: pan-y; overscroll-behavior-x: contain; }
 .tour-progress { height: 8px; border-radius: 999px; background: var(--surface-2); overflow: hidden; margin: 14px 0 20px; }
 .tour-progress span { display: block; height: 100%; background: var(--brand); }
 .tour-number { font-size: 13px; color: var(--muted); }
@@ -201,4 +201,11 @@ details summary { cursor: pointer; color: var(--brand-2); font-weight: 750; }
 @media (min-width: 980px) {
   .toolbar.six-filters { grid-template-columns: 2fr repeat(5, minmax(130px, 1fr)); }
   .employee-card { grid-column: span 2; }
+}
+
+/* Version 4.1 : navigation tactile dans l’écran de ramassage */
+.swipe-hint { display: none; align-items: center; justify-content: center; gap: 8px; margin: 15px 0 0; color: var(--muted); font-size: 12px; font-weight: 750; text-align: center; }
+.swipe-hint span { color: var(--brand); font-size: 20px; line-height: 1; }
+@media (hover: none) and (pointer: coarse) {
+  .swipe-hint { display: flex; }
 }
