@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#f96302">
-  <meta name="description" content="Application mobile de création et de traitement de listes de remplissage en magasin.">
+  <meta name="description" content="Application collaborative de création, d’attribution et de traitement de listes de remplissage en magasin.">
   <link rel="manifest" href="/manifest.webmanifest">
   <link rel="icon" href="/icons/icon-192.png">
   <link rel="apple-touch-icon" href="/icons/icon-192.png">
@@ -12,23 +12,54 @@
   <title>Remplissage magasin</title>
 </head>
 <body>
-  <div id="loginScreen" class="login-screen" hidden>
-    <form id="loginForm" class="login-card">
-      <div class="brand-mark" aria-hidden="true">R</div>
-      <p class="eyebrow">OUTIL DE MAGASIN</p>
-      <h1>Remplissage</h1>
-      <p class="muted">Identifiez-vous pour attribuer les ajouts et les changements de statut.</p>
-      <label>
-        Nom de l’employé
-        <input id="loginName" name="name" autocomplete="name" required maxlength="60" placeholder="Ex. Nathan">
-      </label>
-      <label>
-        PIN de l’application
-        <input id="loginPin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" required minlength="4" maxlength="80" placeholder="••••">
-      </label>
-      <button class="button primary wide" type="submit">Ouvrir l’application</button>
-      <p class="tiny muted">Le PIN est validé par Vercel pour le cloud, le temps réel et les photos.</p>
-    </form>
+  <div id="authScreen" class="login-screen">
+    <div class="auth-wrap">
+      <div class="auth-brand">
+        <div class="brand-mark" aria-hidden="true">R</div>
+        <div><p class="eyebrow">OUTIL DE MAGASIN</p><h1>Remplissage</h1></div>
+      </div>
+
+      <div id="authForms" class="login-card">
+        <div class="auth-tabs" role="tablist">
+          <button id="showLoginTab" class="auth-tab active" type="button" role="tab">Connexion</button>
+          <button id="showSignupTab" class="auth-tab" type="button" role="tab">Inscription</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <h2>Se connecter</h2>
+          <p class="muted">Utilise ton compte approuvé par un superviseur ou un administrateur.</p>
+          <label>Courriel<input name="email" type="email" autocomplete="email" required placeholder="nom@magasin.ca"></label>
+          <label>Mot de passe<input name="password" type="password" autocomplete="current-password" required minlength="8" placeholder="••••••••"></label>
+          <button class="button primary wide" type="submit">Connexion</button>
+        </form>
+
+        <form id="signupForm" class="auth-form" hidden>
+          <h2>Demander un accès</h2>
+          <p class="muted">La demande devra être approuvée avant l’accès à l’application.</p>
+          <label>Nom complet<input name="fullName" autocomplete="name" required maxlength="80" placeholder="Ex. Alex Tremblay"></label>
+          <label>Courriel<input name="email" type="email" autocomplete="email" required placeholder="nom@magasin.ca"></label>
+          <label>Mot de passe<input name="password" type="password" autocomplete="new-password" required minlength="8" placeholder="Au moins 8 caractères"></label>
+          <label>Confirmer le mot de passe<input name="passwordConfirm" type="password" autocomplete="new-password" required minlength="8"></label>
+          <button class="button primary wide" type="submit">Envoyer la demande</button>
+          <p class="tiny muted">Selon la configuration Supabase, un courriel de confirmation peut aussi être envoyé.</p>
+        </form>
+        <div id="authMessage" class="analysis-box" hidden></div>
+      </div>
+
+      <div id="pendingCard" class="login-card" hidden>
+        <p class="eyebrow">DEMANDE EN ATTENTE</p>
+        <h2>Ton compte n’est pas encore approuvé</h2>
+        <p id="pendingMessage" class="muted">Un superviseur ou un administrateur doit accepter ta demande.</p>
+        <form id="bootstrapForm" class="bootstrap-form" hidden>
+          <hr>
+          <h3>Premier administrateur</h3>
+          <p class="small muted">Si aucun administrateur n’existe encore, entre le code d’installation configuré dans Vercel.</p>
+          <label>Code d’installation<input name="pin" type="password" autocomplete="off" required></label>
+          <button class="button primary wide" type="submit">Créer le premier administrateur</button>
+        </form>
+        <div class="button-row top-gap"><button id="pendingRefresh" class="button primary" type="button">Vérifier l’approbation</button><button class="button" data-auth-action="logout" type="button">Déconnexion</button></div>
+      </div>
+    </div>
   </div>
 
   <div id="appShell" class="app-shell" hidden>
@@ -37,10 +68,11 @@
         <p class="eyebrow">REMPLISSAGE MAGASIN</p>
         <h1 id="pageTitle">Aperçu</h1>
       </div>
-      <button id="syncButton" class="status-pill" type="button" aria-label="Synchroniser">
-        <span id="syncDot" class="status-dot local"></span>
-        <span id="syncLabel">Local</span>
-      </button>
+      <div class="topbar-actions">
+        <div class="user-chip"><span id="currentUserName"></span><small id="currentUserRole"></small></div>
+        <button id="syncButton" class="status-pill" type="button" aria-label="Synchroniser"><span id="syncDot" class="status-dot local"></span><span id="syncLabel">Local</span></button>
+        <button id="logoutButton" class="button compact logout-button" type="button" aria-label="Se déconnecter" title="Déconnexion">Déconnexion</button>
+      </div>
     </header>
 
     <main id="appMain" class="main-content" aria-live="polite"></main>
@@ -49,8 +81,10 @@
       <button data-nav="dashboard" class="nav-button active" type="button"><span>⌂</span><small>Aperçu</small></button>
       <button data-nav="scan" class="nav-button" type="button"><span>▣</span><small>Photo</small></button>
       <button data-nav="manual" class="nav-button" type="button"><span>＋</span><small>Ajouter</small></button>
-      <button data-nav="lists" class="nav-button" type="button"><span>☷</span><small>Listes</small></button>
-      <button data-nav="settings" class="nav-button" type="button"><span>⚙</span><small>Réglages</small></button>
+      <button data-nav="lists" class="nav-button" type="button"><span>☷</span><small>Articles</small></button>
+      <button data-nav="assignments" class="nav-button" type="button"><span>👤</span><small>Attribution</small></button>
+      <button data-nav="pickups" class="nav-button" type="button"><span>⇢</span><small>Ramassages</small></button>
+      <button data-nav="more" class="nav-button" type="button"><span>•••</span><small>Plus</small></button>
     </nav>
   </div>
 

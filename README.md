@@ -1,115 +1,170 @@
-# Remplissage magasin V4 — PWA Vercel + Supabase
+# Remplissage magasin V5
 
-## Version 4.1 — navigation par balayage
+Application web mobile/PWA pour relever, attribuer et traiter des articles à remplir en magasin.
 
-Dans l’écran de ramassage / mode remplissage :
+## Nouveautés de la version 5
 
-- balayage vers la gauche : article suivant;
-- balayage vers la droite : article précédent;
-- les boutons **Précédent** et **Suivant** demeurent disponibles;
-- le défilement vertical de la page reste fonctionnel;
-- un balayage commencé sur un bouton ou un champ ne déclenche pas la navigation.
+- Connexion par courriel et mot de passe avec Supabase Auth.
+- Page d’inscription publique.
+- Demandes d’accès en attente jusqu’à l’approbation d’un superviseur ou d’un administrateur.
+- Rôles : employé, superviseur et administrateur, avec restrictions appliquées dans l’interface et lors de la synchronisation serveur.
+- Bouton de déconnexion visible dans l’interface, y compris dans la PWA mobile.
+- Onglet Attribution des articles.
+- Listes de ramassage personnalisées.
+- Attribution d’une liste de ramassage à un ou plusieurs employés.
+- Vérification du permis de chariot élévateur.
+- Historique des ajouts, modifications, attributions, récupérations et remplissages.
+- Rapports PDF des listes de ramassage, incluant le lieu du ramassage et la destination en tablette.
+- Synchronisation automatique et mise à jour en direct des appareils connectés.
+- Photo privée de l’emplacement d’entreposage.
 
-Aucune modification de la base Supabase n’est requise pour cette mise à jour. Le cache PWA passe à `remplissage-v4-1`; fermez puis rouvrez l’application après le déploiement.
+## Rôles
 
+### Employé
 
-Application mobile de réapprovisionnement permettant de relever les produits manquants, d’assigner le travail et de partager les changements entre plusieurs appareils.
+- ajouter et modifier des articles;
+- mettre à jour les statuts;
+- consulter les attributions;
+- créer ses propres listes de ramassage;
+- effectuer une tournée et exporter son rapport PDF;
+- consulter l’historique.
 
-## Nouveautés de la V4
+### Superviseur
 
-- envoi automatique au cloud après chaque ajout, modification, changement de statut ou suppression;
-- réception rapide des changements sur les autres appareils avec Supabase Realtime Broadcast;
-- vérification périodique toutes les 15 secondes comme solution de repli;
-- conservation locale hors ligne et nouvel essai automatique au retour du réseau;
-- gestion des employés;
-- attribution d’un article à un ou plusieurs employés;
-- déclaration du permis de chariot élévateur, numéro et date d’expiration;
-- avertissement et validation lorsqu’un article exige un lift;
-- photo de l’emplacement d’entreposage;
-- stockage privé des photos dans Supabase Storage;
-- affichage des photos avec des liens signés temporaires;
-- filtre « Mes articles » et filtre par employé.
+- toutes les fonctions d’un employé;
+- attribuer des articles;
+- approuver ou refuser les nouvelles demandes d’accès;
+- modifier les permis de lift;
+- gérer les listes source et les départements.
 
-Les fonctions des versions précédentes demeurent présentes : lecture d’étiquette, ajout manuel, SKU `1000` ou `1001`, affichage `1001 123 456`, listes, départements, sélection multiple, mode remplissage, export et PWA.
+Un superviseur approuve les nouvelles demandes comme employés. Seul un administrateur peut octroyer le rôle superviseur ou administrateur.
 
-## Mise à jour depuis la V3
+### Administrateur
+
+- toutes les fonctions du superviseur;
+- modifier les rôles;
+- modifier l’état des comptes;
+- modifier les réglages généraux du magasin.
+
+## Mise à niveau depuis la V4.1
+
+Les données d’articles, listes, départements, employés, photos et statuts existants sont conservées dans `app_state`.
+
+La V5 remplace la connexion par nom et PIN par Supabase Auth. Les utilisateurs doivent donc créer un compte avec leur courriel.
 
 ### 1. Remplacer les fichiers du dépôt
 
-Décompressez cette version et remplacez le contenu du dépôt Git relié à Vercel.
+Copiez le contenu de cette version dans votre dépôt Git relié à Vercel.
 
-### 2. Réexécuter le SQL
+### 2. Exécuter le nouveau schéma SQL
 
-Dans **Supabase → SQL Editor**, exécutez de nouveau :
+Dans Supabase :
+
+1. ouvrez **SQL Editor**;
+2. créez une nouvelle requête;
+3. copiez le contenu de `supabase/schema.sql`;
+4. exécutez la requête.
+
+Le script :
+
+- conserve la table `app_state` existante;
+- crée la table `profiles`;
+- crée automatiquement un profil en attente lors d’une inscription Supabase Auth;
+- crée les profils manquants pour les comptes Auth déjà existants;
+- conserve ou crée le bucket privé des photos d’emplacement.
+
+### 3. Configurer Supabase Auth
+
+Dans Supabase, vérifiez que la connexion par courriel et mot de passe est activée.
+
+Configurez aussi :
+
+- l’URL du site avec votre domaine Vercel;
+- les URL de redirection autorisées pour votre domaine de production et vos domaines Preview, si utilisés.
+
+La confirmation de courriel peut rester activée. Dans ce cas, l’utilisateur doit d’abord confirmer son courriel, puis se connecter; son compte demeure ensuite en attente d’approbation dans l’application.
+
+### 4. Variables Vercel
+
+Ajoutez ou conservez :
 
 ```text
-supabase/schema.sql
-```
-
-Le script est idempotent. Il conserve les données existantes et crée le bucket privé `stock-location-photos`.
-
-### 3. Ajouter la clé publique Supabase dans Vercel
-
-Dans **Vercel → Settings → Environment Variables**, conservez les variables existantes et ajoutez :
-
-```text
-SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
-```
-
-La clé se trouve dans **Supabase → Settings → API Keys**. Utilisez la clé `Publishable`, et non la clé secrète.
-
-Variables complètes :
-
-```text
-APP_PIN=...
-OPENAI_API_KEY=...
-OPENAI_VISION_MODEL=gpt-5-nano
 SUPABASE_URL=https://VOTRE-PROJET.supabase.co
 SUPABASE_SECRET_KEY=sb_secret_...
 SUPABASE_PUBLISHABLE_KEY=sb_publishable_...
+OPENAI_API_KEY=...
+OPENAI_VISION_MODEL=gpt-5-nano
 ```
 
-Mettez uniquement la valeur dans chaque champ Vercel, sans répéter le nom de la variable.
+Pour le premier administrateur, utilisez l’une de ces méthodes.
 
-### 4. Redéployer
+#### Méthode recommandée
 
-Après les variables, lancez un nouveau déploiement Vercel. Fermez ensuite complètement la PWA et rouvrez-la afin de charger le service worker `remplissage-v4-1`.
+```text
+BOOTSTRAP_ADMIN_EMAIL=admin@votre-magasin.ca
+```
 
-## Fonctionnement de la synchronisation
+Le compte inscrit avec ce courriel est automatiquement approuvé comme administrateur lors de sa première connexion.
 
-1. Une modification est enregistrée immédiatement dans le navigateur.
-2. Après environ 700 ms, l’application appelle `/api/sync`.
-3. La fonction Vercel fusionne la copie locale et la copie Supabase.
-4. Après réussite, le client envoie un événement Realtime sans données sensibles.
-5. Les autres clients reçoivent l’événement et récupèrent la nouvelle copie par `/api/sync` avec leur PIN.
-6. Si Realtime n’est pas configuré, une vérification périodique garde tout de même les clients à jour.
+#### Méthode de secours
 
-Le bouton **Synchroniser maintenant** reste disponible pour forcer une opération.
+```text
+APP_PIN=un-long-code-d-installation
+```
 
-## Employés et permis de lift
+Lorsque aucun administrateur n’existe, le premier utilisateur connecté en attente verra un formulaire permettant d’entrer ce code. Dès qu’un administrateur existe, cette promotion initiale est bloquée.
 
-Dans **Réglages → Employés et permis de lift** :
+### 5. Redéployer
 
-- ajoutez le nom de l’employé;
-- indiquez s’il possède un permis;
-- ajoutez facultativement le numéro et la date d’expiration;
-- modifiez l’employé lorsque son statut change.
+Après les changements de variables, redéployez l’application dans Vercel.
 
-Un article peut être assigné à plusieurs employés. Lorsqu’il nécessite un chariot élévateur et que des employés sont assignés, l’application exige qu’au moins une personne ait un permis déclaré valide. Une fiche non assignée peut être créée, mais elle affiche alors un avertissement « permis requis ».
+Fermez complètement l’ancienne PWA, puis rouvrez-la. Si l’ancienne interface reste en cache, retirez et réinstallez la PWA ou videz les données du site. Le nouveau cache s’appelle `remplissage-v5`.
 
-Cette vérification est un aide-mémoire administratif. Elle ne remplace pas la validation officielle de la formation, de l’autorisation de l’employeur et des règles de sécurité applicables.
+## Approbation des utilisateurs
 
-## Photos d’emplacement
+1. L’utilisateur ouvre la page d’inscription.
+2. Il entre son nom, son courriel et son mot de passe.
+3. Le profil est créé avec l’état `pending`.
+4. Après connexion, une page lui indique que sa demande est en attente.
+5. Un superviseur ou un administrateur ouvre **Plus → Utilisateurs**.
+6. Il approuve ou refuse la demande.
+7. L’utilisateur clique sur **Vérifier l’approbation** ou se reconnecte.
 
-Les photos d’emplacement sont :
+## Listes de ramassage personnalisées
 
-- compressées sur le téléphone;
-- limitées à 3 Mo côté serveur;
-- envoyées par `/api/photo-upload`;
-- conservées dans un bucket privé Supabase;
-- ouvertes au moyen d’un lien signé d’une heure obtenu par `/api/photo-url`.
+Une liste peut être créée :
 
-La clé secrète Supabase n’est jamais exposée au navigateur.
+- depuis l’onglet **Ramassages**;
+- en sélectionnant plusieurs articles dans **Articles**, puis en cliquant sur **Créer un ramassage**.
+
+La liste contient :
+
+- un nom;
+- un point de départ ou une zone;
+- les articles inclus;
+- les employés responsables;
+- les lieux individuels de ramassage;
+- les destinations en tablette.
+
+Le bouton **PDF** produit un rapport téléchargeable avec ces informations.
+
+## Architecture
+
+- Interface statique/PWA : `index.html`, `app.js`, `styles.css`.
+- Authentification : Supabase Auth.
+- Profils et rôles : `public.profiles`.
+- État collaboratif : `public.app_state`.
+- Photos : bucket privé `stock-location-photos`.
+- Fonctions Vercel :
+  - `api/client-config.js`;
+  - `api/me.js`;
+  - `api/bootstrap-admin.js`;
+  - `api/users.js`;
+  - `api/sync.js`;
+  - `api/report-pdf.js`;
+  - fonctions d’analyse et de photos.
+
+Les clés secrètes Supabase et OpenAI ne sont jamais envoyées au navigateur. Les fonctions Vercel valident le jeton Supabase Auth avant d’accéder aux données. La synchronisation empêche notamment un employé de modifier les affectations, la structure du magasin ou les réglages réservés aux rôles supérieurs.
 
 ## Développement local
 
@@ -118,26 +173,10 @@ npm install
 vercel dev
 ```
 
-## Structure principale
+Créez un fichier `.env.local` à partir de `.env.example`.
 
-```text
-api/analyze.js             Analyse d’étiquette
-api/sync.js                Fusion et synchronisation cloud
-api/realtime-config.js     Configuration publique Realtime après validation du PIN
-api/photo-upload.js        Téléversement privé des photos
-api/photo-url.js           Création des liens signés
-api/photo-delete.js        Suppression des photos
-lib/supabase-admin.js      Client Supabase côté serveur
-supabase/schema.sql        Table et bucket Storage
-app.js                     Interface et synchronisation automatique
-styles.css                 Interface mobile
-sw.js                      PWA hors ligne
-```
+## Limites actuelles
 
-## Limites du MVP
-
-- le PIN demeure partagé entre les employés;
-- l’application utilise une seule copie de magasin identifiée par `default`;
-- les permis sont déclarés manuellement;
-- Realtime utilise un canal Broadcast public dont le nom est remis seulement après validation du PIN; les données elles-mêmes restent protégées derrière les fonctions Vercel;
-- pour plusieurs magasins ou des exigences d’audit, il faudra ajouter une authentification individuelle et des rôles.
+- L’état opérationnel principal demeure un document JSON partagé dans `app_state`; cette architecture convient à un MVP ou à un magasin de taille modérée.
+- En cas de très grand volume ou de nombreuses modifications simultanées, une migration vers des tables relationnelles distinctes pour les articles, listes et historiques serait recommandée.
+- Les permis enregistrés constituent une vérification administrative interne et ne remplacent pas les exigences de formation, d’autorisation et de sécurité de l’employeur.

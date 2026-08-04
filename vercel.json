@@ -7,7 +7,11 @@
     "api/sync.js": { "maxDuration": 30 },
     "api/photo-upload.js": { "maxDuration": 30 },
     "api/photo-url.js": { "maxDuration": 30 },
-    "api/photo-delete.js": { "maxDuration": 30 }
+    "api/photo-delete.js": { "maxDuration": 30 },
+    "api/report-pdf.js": { "maxDuration": 30 },
+    "api/users.js": { "maxDuration": 30 },
+    "api/me.js": { "maxDuration": 30 },
+    "api/bootstrap-admin.js": { "maxDuration": 30 }
   },
   "headers": [
     {
@@ -15,7 +19,8 @@
       "headers": [
         { "key": "X-Content-Type-Options", "value": "nosniff" },
         { "key": "Referrer-Policy", "value": "strict-origin-when-cross-origin" },
-        { "key": "Permissions-Policy", "value": "camera=(self)" }
+        { "key": "Permissions-Policy", "value": "camera=(self)" },
+        { "key": "X-Frame-Options", "value": "DENY" }
       ]
     },
     {

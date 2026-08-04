@@ -1,13 +1,13 @@
 {
   "name": "remplissage-magasin",
-  "version": "1.2.1",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "vercel dev"
   },
   "dependencies": {
-    "@supabase/supabase-js": "^2.107.0"
+    "@supabase/supabase-js": "2.109.0"
   },
   "engines": {
     "node": ">=20"

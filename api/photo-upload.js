@@ -1,5 +1,5 @@
 import crypto from "node:crypto";
-import { isAuthorized, json } from "../lib/auth.js";
+import { getAuthContext, json, sendError } from "../lib/auth.js";
 import { getSupabaseAdmin } from "../lib/supabase-admin.js";
 
 const BUCKET = "stock-location-photos";
@@ -16,7 +16,7 @@ function validPath(path) {
 
 export default async function handler(request, response) {
   if (request.method !== "POST") return json(response, 405, { error: "Méthode non permise" });
-  if (!isAuthorized(request)) return json(response, 401, { error: "PIN invalide" });
+  try { await getAuthContext(request); } catch (error) { return sendError(response, error); }
 
   try {
     const image = String(request.body?.image || "");

@@ -1,4 +1,4 @@
-import { isAuthorized, json } from "../lib/auth.js";
+import { getAuthContext, json, sendError } from "../lib/auth.js";
 
 const MAX_DATA_URL_LENGTH = 4_000_000;
 const schema = {
@@ -58,9 +58,7 @@ export default async function handler(request, response) {
   if (request.method !== "POST") {
     return json(response, 405, { error: "Méthode non permise" });
   }
-  if (!isAuthorized(request)) {
-    return json(response, 401, { error: "PIN invalide" });
-  }
+  try { await getAuthContext(request); } catch (error) { return sendError(response, error); }
   if (!process.env.OPENAI_API_KEY) {
     return json(response, 503, { error: "OPENAI_API_KEY n’est pas configurée dans Vercel" });
   }
