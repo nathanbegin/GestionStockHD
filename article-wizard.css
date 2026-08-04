@@ -16,12 +16,37 @@
   display: none !important;
 }
 
-.article-wizard-step input,
+.article-wizard-step input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
 .article-wizard-step select,
 .article-wizard-step textarea {
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
+}
+
+.article-wizard-step .assignment-field,
+.article-wizard-step .employee-picker,
+.article-wizard-step .employee-option {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.article-wizard-step .employee-option {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+}
+
+.article-wizard-step .employee-option input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  margin: 1px 0 0;
+}
+
+.article-wizard-step .employee-option > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .article-wizard-header {
@@ -128,6 +153,25 @@
   .article-wizard-step {
     min-height: 0;
     padding-bottom: .25rem;
+  }
+
+  .article-wizard-step .assignment-field {
+    padding: 12px;
+  }
+
+  .article-wizard-step .employee-picker {
+    gap: 10px;
+  }
+
+  .article-wizard-step .employee-option {
+    padding: 13px;
+    gap: 12px;
+  }
+
+  .article-wizard-step .employee-option strong,
+  .article-wizard-step .employee-option small {
+    display: block;
+    line-height: 1.25;
   }
 
   .article-wizard-controls {
