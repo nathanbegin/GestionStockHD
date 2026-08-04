@@ -422,8 +422,10 @@ async function analyzePhoto(btn) {
   btn.disabled = true; btn.textContent = "Analyse…";
   try {
     const response = await fetch("/api/analyze", { method: "POST", headers: { "Content-Type": "application/json", "x-app-pin": session.pin }, body: JSON.stringify({ image: scanDraft.photo }) });
-    const data = await response.json();
-    if (!response.ok) throw new Error(data.error || "Analyse impossible");
+    const raw = await response.text();
+    let data = {};
+    try { data = raw ? JSON.parse(raw) : {}; } catch { /* réponse non JSON */ }
+    if (!response.ok) throw new Error(data.error || `Analyse impossible (HTTP ${response.status})`);
     scanDraft.sku = data.sku || data.barcode || scanDraft.sku;
     scanDraft.name = data.productName || scanDraft.name;
     scanDraft.barcode = data.barcode || scanDraft.barcode;

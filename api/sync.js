@@ -26,18 +26,39 @@ function mergeSnapshots(local, cloud) {
   };
 }
 async function supabase(path, options = {}) {
-  const response = await fetch(`${process.env.SUPABASE_URL}/rest/v1/${path}`, {
+  const url = String(process.env.SUPABASE_URL || "").trim().replace(/\/+$/, "");
+  const key = String(process.env.SUPABASE_SECRET_KEY || "").trim();
+
+  const headers = {
+    apikey: key,
+    "Content-Type": "application/json",
+    ...(options.headers || {})
+  };
+
+  // Les nouvelles clés Supabase sb_secret_* sont opaques et ne sont pas des JWT.
+  // Le header Authorization Bearer reste nécessaire seulement pour les anciennes
+  // clés service_role au format JWT (elles commencent généralement par "eyJ").
+  if (!key.startsWith("sb_secret_") && !key.startsWith("sb_publishable_")) {
+    headers.Authorization = `Bearer ${key}`;
+  }
+
+  const response = await fetch(`${url}/rest/v1/${path}`, {
     ...options,
-    headers: {
-      apikey: process.env.SUPABASE_SECRET_KEY,
-      Authorization: `Bearer ${process.env.SUPABASE_SECRET_KEY}`,
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
+    headers
   });
+
   const text = await response.text();
-  const body = text ? JSON.parse(text) : null;
-  if (!response.ok) throw new Error(body?.message || `Erreur Supabase ${response.status}`);
+  let body = null;
+  try {
+    body = text ? JSON.parse(text) : null;
+  } catch {
+    body = text;
+  }
+
+  if (!response.ok) {
+    const message = body?.message || body?.msg || body?.error_description || body?.error || body;
+    throw new Error(typeof message === "string" ? message : `Erreur Supabase ${response.status}`);
+  }
   return body;
 }
 

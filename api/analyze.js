@@ -15,49 +15,154 @@ const schema = {
   required: ["sku", "barcode", "productName", "visibleText", "summary", "confidence"]
 };
 
-function extractOutputText(data) {
-  if (typeof data.output_text === "string") return data.output_text;
-  for (const item of data.output || []) {
+function getOutputText(data) {
+  for (const item of data?.output || []) {
+    if (item?.type !== "message") continue;
     for (const content of item.content || []) {
-      if (content.type === "output_text" && typeof content.text === "string") return content.text;
+      if (content?.type === "output_text" && typeof content.text === "string") {
+        return content.text;
+      }
+    }
+  }
+  return null;
+}
+
+function getRefusal(data) {
+  for (const item of data?.output || []) {
+    for (const content of item.content || []) {
+      if (content?.type === "refusal") {
+        return content.refusal || "L’analyse de cette image a été refusée.";
+      }
     }
   }
   return null;
 }
 
 export default async function handler(request, response) {
-  if (request.method !== "POST") return json(response, 405, { error: "Méthode non permise" });
-  if (!isAuthorized(request)) return json(response, 401, { error: "PIN invalide" });
-  if (!process.env.OPENAI_API_KEY) return json(response, 503, { error: "OPENAI_API_KEY n’est pas configurée dans Vercel" });
+  if (request.method !== "POST") {
+    return json(response, 405, { error: "Méthode non permise" });
+  }
+  if (!isAuthorized(request)) {
+    return json(response, 401, { error: "PIN invalide" });
+  }
+  if (!process.env.OPENAI_API_KEY) {
+    return json(response, 503, { error: "OPENAI_API_KEY n’est pas configurée dans Vercel" });
+  }
 
   const image = request.body?.image;
-  if (typeof image !== "string" || !image.startsWith("data:image/")) return json(response, 400, { error: "Image invalide" });
-  if (image.length > MAX_DATA_URL_LENGTH) return json(response, 413, { error: "Image trop volumineuse" });
+  if (typeof image !== "string" || !image.startsWith("data:image/")) {
+    return json(response, 400, { error: "Image invalide" });
+  }
+  if (image.length > MAX_DATA_URL_LENGTH) {
+    return json(response, 413, { error: "Image trop volumineuse" });
+  }
+
+  const model = process.env.OPENAI_VISION_MODEL || "gpt-5-nano";
 
   try {
+    const requestBody = {
+      model,
+      store: false,
+      max_output_tokens: 1200,
+      input: [{
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: "Analyse cette étiquette de magasin. Extrais uniquement les informations réellement visibles. Le SKU est le numéro d’article interne, souvent distinct du prix. N’invente rien. Si un champ est illisible, retourne null. Réponds selon le schéma JSON demandé."
+          },
+          { type: "input_image", image_url: image, detail: "high" }
+        ]
+      }],
+      text: {
+        format: {
+          type: "json_schema",
+          name: "store_label_extraction",
+          strict: true,
+          schema
+        }
+      }
+    };
+
+    // GPT-5 nano raisonne par défaut. Une faible limite de sortie peut donc être
+    // consommée avant la génération du JSON. L'effort minimal réduit ce risque,
+    // accélère la réponse et diminue le coût.
+    if (/^gpt-5(?:-|$)/.test(model)) {
+      requestBody.reasoning = { effort: "minimal" };
+    }
+
     const apiResponse = await fetch("https://api.openai.com/v1/responses", {
       method: "POST",
-      headers: { "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`, "Content-Type": "application/json" },
-      body: JSON.stringify({
-        model: process.env.OPENAI_VISION_MODEL || "gpt-5.6",
-        store: false,
-        max_output_tokens: 500,
-        input: [{
-          role: "user",
-          content: [
-            { type: "input_text", text: "Analyse cette étiquette de magasin. Extrais seulement ce qui est réellement visible. Le SKU est le numéro d’article interne, souvent distinct du prix. N’invente rien. Si un champ est illisible, retourne null. Résume brièvement les indices qui justifient le résultat." },
-            { type: "input_image", image_url: image, detail: "high" }
-          ]
-        }],
-        text: { format: { type: "json_schema", name: "store_label_extraction", strict: true, schema } }
-      })
+      headers: {
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify(requestBody)
     });
-    const data = await apiResponse.json();
-    if (!apiResponse.ok) return json(response, apiResponse.status, { error: data.error?.message || "Erreur OpenAI" });
-    const text = extractOutputText(data);
-    if (!text) return json(response, 502, { error: "Aucun résultat d’analyse reçu" });
-    return json(response, 200, JSON.parse(text));
+
+    const raw = await apiResponse.text();
+    let data;
+    try {
+      data = raw ? JSON.parse(raw) : {};
+    } catch {
+      console.error("Réponse OpenAI non JSON", {
+        status: apiResponse.status,
+        requestId: apiResponse.headers.get("x-request-id"),
+        preview: raw.slice(0, 300)
+      });
+      return json(response, 502, { error: "OpenAI a retourné une réponse illisible" });
+    }
+
+    if (!apiResponse.ok) {
+      console.error("Erreur OpenAI", {
+        status: apiResponse.status,
+        requestId: apiResponse.headers.get("x-request-id"),
+        code: data?.error?.code,
+        message: data?.error?.message
+      });
+      return json(response, apiResponse.status, {
+        error: data?.error?.message || `Erreur OpenAI (${apiResponse.status})`
+      });
+    }
+
+    const refusal = getRefusal(data);
+    if (refusal) {
+      return json(response, 422, { error: refusal });
+    }
+
+    const text = getOutputText(data);
+    if (!text) {
+      const incompleteReason = data?.incomplete_details?.reason;
+      console.error("Réponse OpenAI sans output_text", {
+        status: data?.status,
+        incompleteReason,
+        model: data?.model,
+        outputTypes: (data?.output || []).map(item => item?.type),
+        usage: data?.usage
+      });
+
+      if (data?.status === "incomplete") {
+        return json(response, 502, {
+          error: `Analyse OpenAI incomplète${incompleteReason ? ` : ${incompleteReason}` : ""}. Réessaie avec la nouvelle version.`
+        });
+      }
+
+      return json(response, 502, {
+        error: "OpenAI n’a retourné aucun texte d’analyse. Consulte les journaux Vercel de /api/analyze."
+      });
+    }
+
+    try {
+      return json(response, 200, JSON.parse(text));
+    } catch {
+      console.error("JSON structuré OpenAI invalide", {
+        requestId: apiResponse.headers.get("x-request-id"),
+        preview: text.slice(0, 300)
+      });
+      return json(response, 502, { error: "Le résultat d’analyse n’était pas un JSON valide" });
+    }
   } catch (error) {
-    return json(response, 500, { error: error.message || "Erreur pendant l’analyse" });
+    console.error("Erreur interne /api/analyze", error);
+    return json(response, 500, { error: error?.message || "Erreur pendant l’analyse" });
   }
 }
