@@ -13,11 +13,15 @@
 
   function renamePickupCategory() {
     document.querySelectorAll('[data-nav="pickups"] small').forEach(label => {
-      label.textContent = "Listes de ramassage";
+      if (label.textContent !== "Listes de ramassage") {
+        label.textContent = "Listes de ramassage";
+      }
     });
 
     document.querySelectorAll('[data-action="go"][data-view="pickups"] h3').forEach(title => {
-      title.textContent = "Listes de ramassage";
+      if (title.textContent !== "Listes de ramassage") {
+        title.textContent = "Listes de ramassage";
+      }
     });
   }
 
@@ -27,7 +31,7 @@
     document.querySelectorAll("#appMain .stats-grid .stat-card").forEach(tile => {
       const label = tile.querySelector(".stat-label")?.textContent?.trim();
       const route = TILE_ROUTES[label];
-      if (!route) return;
+      if (!route || tile.dataset.dashboardRoute === route) return;
 
       tile.dataset.dashboardRoute = route;
       tile.setAttribute("role", "button");
