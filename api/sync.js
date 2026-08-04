@@ -99,6 +99,34 @@ function applyRoleRestrictions(local, cloud, profile, user) {
   return safe;
 }
 
+function removeInactiveAccountEmployees(snapshot, approvedProfileIds = []) {
+  const approvedIds = new Set(approvedProfileIds);
+  const staleAccountIds = new Set(
+    (snapshot.employees || [])
+      .filter(employee => employee?.isAccount && !approvedIds.has(employee.id))
+      .map(employee => employee.id)
+  );
+  if (!staleAccountIds.size) return snapshot;
+
+  const now = new Date().toISOString();
+  const employees = (snapshot.employees || []).filter(employee => !staleAccountIds.has(employee.id));
+  const validEmployeeIds = new Set(employees.map(employee => employee.id));
+  return {
+    ...snapshot,
+    employees,
+    items: (snapshot.items || []).map(item => ({
+      ...item,
+      assignedEmployeeIds: [...new Set((item.assignedEmployeeIds || []).filter(id => validEmployeeIds.has(id)))]
+    })),
+    pickupLists: (snapshot.pickupLists || []).map(list => ({
+      ...list,
+      assignedEmployeeIds: [...new Set((list.assignedEmployeeIds || []).filter(id => validEmployeeIds.has(id)))]
+    })),
+    deletedEmployeeIds: [...new Set([...(snapshot.deletedEmployeeIds || []), ...staleAccountIds])],
+    meta: { ...(snapshot.meta || {}), updatedAt: now, lastSyncAt: now }
+  };
+}
+
 function mergeSnapshots(local, cloud) {
   const sourceCloud = cloud || {};
   const deletedItems = new Set([...(sourceCloud.deletedIds || []), ...(local.deletedIds || [])]);
@@ -174,9 +202,19 @@ export default async function handler(request, response) {
     const cloud = rows?.[0]?.snapshot || null;
     const restricted = applyRoleRestrictions(local, cloud, profile, user);
     const merged = mergeSnapshots(restricted, cloud);
-    const { error: writeError } = await supabase.from("app_state").upsert({ id: "default", snapshot: merged, updated_at: new Date().toISOString() });
+
+    // Les profils Supabase approuvés sont la source de vérité pour les comptes.
+    // Les employés ajoutés manuellement (isAccount=false) restent disponibles.
+    const { data: approvedProfiles, error: profilesError } = await supabase
+      .from("profiles")
+      .select("id")
+      .eq("approval_status", "approved");
+    if (profilesError) throw profilesError;
+    const cleaned = removeInactiveAccountEmployees(merged, (approvedProfiles || []).map(row => row.id));
+
+    const { error: writeError } = await supabase.from("app_state").upsert({ id: "default", snapshot: cleaned, updated_at: new Date().toISOString() });
     if (writeError) throw writeError;
-    return json(response, 200, { snapshot: merged });
+    return json(response, 200, { snapshot: cleaned });
   } catch (error) {
     return sendError(response, error, "Erreur de synchronisation");
   }
