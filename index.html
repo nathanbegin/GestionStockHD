@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="fr-CA">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#173f35">
+  <meta name="description" content="Application mobile de création et de traitement de listes de remplissage en magasin.">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" href="/icons/icon-192.png">
+  <link rel="apple-touch-icon" href="/icons/icon-192.png">
+  <link rel="stylesheet" href="/styles.css">
+  <title>Remplissage magasin</title>
+</head>
+<body>
+  <div id="loginScreen" class="login-screen" hidden>
+    <form id="loginForm" class="login-card">
+      <div class="brand-mark" aria-hidden="true">R</div>
+      <p class="eyebrow">OUTIL DE MAGASIN</p>
+      <h1>Remplissage</h1>
+      <p class="muted">Identifiez-vous pour attribuer les ajouts et les changements de statut.</p>
+      <label>
+        Nom de l’employé
+        <input id="loginName" name="name" autocomplete="name" required maxlength="60" placeholder="Ex. Nathan">
+      </label>
+      <label>
+        PIN de l’application
+        <input id="loginPin" name="pin" type="password" inputmode="numeric" autocomplete="current-password" required minlength="4" maxlength="80" placeholder="••••">
+      </label>
+      <button class="button primary wide" type="submit">Ouvrir l’application</button>
+      <p class="tiny muted">Le PIN est validé par Vercel lorsque la synchronisation ou l’analyse photo est utilisée.</p>
+    </form>
+  </div>
+
+  <div id="appShell" class="app-shell" hidden>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">REMPLISSAGE MAGASIN</p>
+        <h1 id="pageTitle">Aperçu</h1>
+      </div>
+      <button id="syncButton" class="status-pill" type="button" aria-label="Synchroniser">
+        <span id="syncDot" class="status-dot local"></span>
+        <span id="syncLabel">Local</span>
+      </button>
+    </header>
+
+    <main id="appMain" class="main-content" aria-live="polite"></main>
+
+    <nav class="bottom-nav" aria-label="Navigation principale">
+      <button data-nav="dashboard" class="nav-button active" type="button"><span>⌂</span><small>Aperçu</small></button>
+      <button data-nav="scan" class="nav-button" type="button"><span>▣</span><small>Photo</small></button>
+      <button data-nav="manual" class="nav-button" type="button"><span>＋</span><small>Ajouter</small></button>
+      <button data-nav="lists" class="nav-button" type="button"><span>☷</span><small>Listes</small></button>
+      <button data-nav="settings" class="nav-button" type="button"><span>⚙</span><small>Réglages</small></button>
+    </nav>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <input id="importInput" type="file" accept="application/json" hidden>
+  <script type="module" src="/app.js"></script>
+</body>
+</html>
