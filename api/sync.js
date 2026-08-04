@@ -11,17 +11,78 @@ function mergeById(local = [], cloud = []) {
   }
   return [...map.values()];
 }
+
+function normalizeName(value) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function dedupeNamed(collection = []) {
+  const kept = [];
+  const byName = new Map();
+  const idMap = new Map();
+  for (const raw of collection) {
+    const name = String(raw?.name || "").trim().replace(/\s+/g, " ");
+    if (!name || !raw?.id) continue;
+    const key = normalizeName(name);
+    const existing = byName.get(key);
+    if (existing) {
+      idMap.set(raw.id, existing.id);
+      if (new Date(raw.updatedAt || 0) > new Date(existing.updatedAt || 0)) {
+        existing.name = name;
+        existing.updatedAt = raw.updatedAt;
+      }
+      continue;
+    }
+    const entry = { ...raw, name };
+    kept.push(entry);
+    byName.set(key, entry);
+    idMap.set(entry.id, entry.id);
+  }
+  return { collection: kept, idMap };
+}
+
+function extractSkuDigits(value) {
+  const text = String(value || "").replace(/[–—−]/g, "-");
+  const match = text.match(/(?:^|\D)((?:1000|1001)(?:[\s-]*\d){6})(?!\d)/);
+  if (!match) return "";
+  const digits = match[1].replace(/\D/g, "");
+  return /^(?:1000|1001)\d{6}$/.test(digits) ? digits : "";
+}
+
+function formatSku(value) {
+  const digits = extractSkuDigits(value);
+  return digits ? `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 10)}` : String(value || "").trim();
+}
+
 function mergeSnapshots(local, cloud) {
-  if (!cloud) return local;
-  const deleted = new Set([...(cloud.deletedIds || []), ...(local.deletedIds || [])]);
-  const items = mergeById(local.items, cloud.items).filter(x => !deleted.has(x.id));
+  const sourceCloud = cloud || { lists: [], departments: [], items: [], deletedIds: [] };
+  const deleted = new Set([...(sourceCloud.deletedIds || []), ...(local.deletedIds || [])]);
+  const lists = dedupeNamed(mergeById(local.lists, sourceCloud.lists));
+  const departments = dedupeNamed(mergeById(local.departments, sourceCloud.departments));
+  const listFallback = lists.collection[0]?.id || "";
+  const departmentFallback = departments.collection[0]?.id || "";
+  const items = mergeById(local.items, sourceCloud.items)
+    .filter(x => !deleted.has(x.id))
+    .map(item => ({
+      ...item,
+      sku: formatSku(item.sku),
+      listId: lists.idMap.get(item.listId) || listFallback,
+      departmentId: departments.idMap.get(item.departmentId) || departmentFallback
+    }));
   return {
     version: 1,
-    lists: mergeById(local.lists, cloud.lists),
-    departments: mergeById(local.departments, cloud.departments),
+    lists: lists.collection,
+    departments: departments.collection,
     items,
     deletedIds: [...deleted],
-    settings: latest({ ...cloud.settings, updatedAt: cloud.meta?.updatedAt }, { ...local.settings, updatedAt: local.meta?.updatedAt }),
+    settings: cloud
+      ? latest({ ...cloud.settings, updatedAt: cloud.meta?.updatedAt }, { ...local.settings, updatedAt: local.meta?.updatedAt })
+      : local.settings,
     meta: { updatedAt: new Date().toISOString(), lastSyncAt: new Date().toISOString() }
   };
 }

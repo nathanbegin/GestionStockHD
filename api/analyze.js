@@ -15,6 +15,22 @@ const schema = {
   required: ["sku", "barcode", "productName", "visibleText", "summary", "confidence"]
 };
 
+
+function extractSkuDigits(...values) {
+  for (const value of values) {
+    const text = String(value || "").replace(/[–—−]/g, "-");
+    const match = text.match(/(?:^|\D)((?:1000|1001)(?:[\s-]*\d){6})(?!\d)/);
+    if (!match) continue;
+    const digits = match[1].replace(/\D/g, "");
+    if (/^(?:1000|1001)\d{6}$/.test(digits)) return digits;
+  }
+  return "";
+}
+
+function formatSku(digits) {
+  return digits ? `${digits.slice(0, 4)} ${digits.slice(4, 7)} ${digits.slice(7, 10)}` : null;
+}
+
 function getOutputText(data) {
   for (const item of data?.output || []) {
     if (item?.type !== "message") continue;
@@ -69,7 +85,7 @@ export default async function handler(request, response) {
         content: [
           {
             type: "input_text",
-            text: "Analyse cette étiquette de magasin. Extrais uniquement les informations réellement visibles. Le SKU est le numéro d’article interne, souvent distinct du prix. N’invente rien. Si un champ est illisible, retourne null. Réponds selon le schéma JSON demandé."
+            text: "Analyse cette étiquette de magasin. Le numéro d’article interne contient exactement 10 chiffres, commence par 1000 ou 1001, et peut être imprimé comme 1001-123456, 1001123456 ou 1001 123 456. Extrais ce numéro dans le champ sku et retourne-le au format 1001 123 456. Ne confonds pas le SKU avec le prix ou un autre code-barres. Extrais uniquement les informations réellement visibles. N’invente rien. Si un champ est illisible, retourne null. Réponds selon le schéma JSON demandé."
           },
           { type: "input_image", image_url: image, detail: "high" }
         ]
@@ -153,7 +169,10 @@ export default async function handler(request, response) {
     }
 
     try {
-      return json(response, 200, JSON.parse(text));
+      const result = JSON.parse(text);
+      const skuDigits = extractSkuDigits(result.sku, result.visibleText, result.summary);
+      result.sku = formatSku(skuDigits);
+      return json(response, 200, result);
     } catch {
       console.error("JSON structuré OpenAI invalide", {
         requestId: apiResponse.headers.get("x-request-id"),

@@ -4,13 +4,16 @@ Application mobile de réapprovisionnement permettant de relever les produits ma
 
 ## Inclus dans cette version
 
-- capture avec la caméra ou importation d’une photo;
+- deux choix distincts sur mobile : prendre une nouvelle photo ou téléverser une photo existante;
 - lecture de codes-barres avec l’API native du navigateur lorsqu’elle est disponible;
 - analyse visuelle facultative avec OpenAI;
-- confirmation du SKU avant l’ajout;
+- détection des numéros d’article commençant par `1000` ou `1001`, avec affichage normalisé `1001 123 456`;
 - plusieurs listes et départements;
 - quantité, priorité, statut, notes et deux emplacements;
 - recherche et filtres;
+- sélection multiple avec changement de statut, modification groupée et suppression groupée;
+- nettoyage automatique des départements et listes en doublon;
+- thème orange et icônes PWA assorties;
 - mode guidé de remplissage;
 - fonctionnement hors ligne avec PWA;
 - sauvegarde locale automatique;
@@ -41,7 +44,7 @@ Ajouter dans Vercel :
 
 ```text
 OPENAI_API_KEY=...
-OPENAI_VISION_MODEL=gpt-5.6
+OPENAI_VISION_MODEL=gpt-5-nano
 ```
 
 La photo est redimensionnée dans le navigateur avant l’envoi. La clé reste côté serveur. Le résultat doit toujours être vérifié par l’employé avant l’ajout.
@@ -79,3 +82,15 @@ manifest.webmanifest  Installation PWA
 - Les suppressions sont conservées comme marqueurs pour éviter qu’un article supprimé réapparaisse après synchronisation.
 - Les photos sont conservées seulement si l’utilisateur coche l’option; elles occupent de l’espace dans le navigateur.
 - Le catalogue officiel du magasin n’est pas encore intégré.
+
+
+## Mise à jour depuis une version précédente
+
+Après avoir remplacé les fichiers dans GitHub et redéployé sur Vercel :
+
+1. ouvrir l’application une fois en ligne afin que le nouveau service worker `remplissage-v3` s’installe;
+2. fermer complètement la PWA, puis la rouvrir;
+3. au besoin, faire un rechargement forcé du site;
+4. pour voir immédiatement la nouvelle icône orange sur certains téléphones, retirer puis réinstaller la PWA.
+
+La prochaine synchronisation nettoiera aussi les départements portant le même nom et réassignera leurs articles au département conservé.
