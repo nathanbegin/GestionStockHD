@@ -1,5 +1,8 @@
 (() => {
   const FORM_IDS = new Set(["itemForm", "scanForm"]);
+  const KEYBOARD_THRESHOLD = 120;
+  const FIELD_TOP_GAP = 96;
+  const FIELD_BOTTOM_GAP = 28;
 
   function directText(element) {
     return [...element.childNodes]
@@ -46,6 +49,24 @@
     return true;
   }
 
+  function isEditableField(element) {
+    return element instanceof HTMLElement && element.matches("input, select, textarea");
+  }
+
+  function visualViewportBounds() {
+    const viewport = window.visualViewport;
+    const top = viewport?.offsetTop || 0;
+    const height = viewport?.height || window.innerHeight;
+    return { top, bottom: top + height };
+  }
+
+  function keyboardHeight() {
+    const viewport = window.visualViewport;
+    if (!viewport) return 0;
+    const overlap = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+    return overlap >= KEYBOARD_THRESHOLD ? Math.round(overlap) : 0;
+  }
+
   function initializeWizard(form) {
     if (!FORM_IDS.has(form.id) || form.dataset.articleWizard === "ready") return;
 
@@ -90,6 +111,42 @@
     const question = header.querySelector(".article-wizard-question");
     const progress = header.querySelector(".article-wizard-progress span");
     let activeIndex = 0;
+    let visibilityTimer = null;
+
+    function updateKeyboardSpace() {
+      const height = keyboardHeight();
+      const spacing = height ? height + FIELD_BOTTOM_GAP : 0;
+      form.style.paddingBottom = spacing ? `${spacing}px` : "";
+      form.style.scrollPaddingBottom = spacing ? `${spacing}px` : "";
+      form.classList.toggle("article-wizard-keyboard-open", height > 0);
+      return height;
+    }
+
+    function keepFieldVisible(field = document.activeElement, behavior = "smooth") {
+      if (!isEditableField(field) || !form.contains(field)) return;
+
+      const viewport = visualViewportBounds();
+      const rect = field.getBoundingClientRect();
+      const visibleTop = viewport.top + FIELD_TOP_GAP;
+      const visibleBottom = viewport.bottom - FIELD_BOTTOM_GAP;
+      let movement = 0;
+
+      if (rect.bottom > visibleBottom) movement = rect.bottom - visibleBottom;
+      else if (rect.top < visibleTop) movement = rect.top - visibleTop;
+
+      if (Math.abs(movement) > 2) {
+        window.scrollBy({ top: movement, behavior });
+      }
+    }
+
+    function scheduleVisibilityCheck(field = document.activeElement, delay = 240) {
+      clearTimeout(visibilityTimer);
+      visibilityTimer = window.setTimeout(() => {
+        if (!form.isConnected) return;
+        updateKeyboardSpace();
+        keepFieldVisible(field);
+      }, delay);
+    }
 
     function showStep(index, { focus = true } = {}) {
       activeIndex = Math.max(0, Math.min(index, steps.length - 1));
@@ -110,6 +167,7 @@
         const field = steps[activeIndex].querySelector("input:not([type='hidden']):not([type='file']), select, textarea, button");
         field?.focus({ preventScroll: true });
         header.scrollIntoView({ behavior: "smooth", block: "start" });
+        if (isEditableField(field)) scheduleVisibilityCheck(field, 280);
       }
     }
 
@@ -126,6 +184,18 @@
       nextButton.click();
     });
 
+    form.addEventListener("focusin", event => {
+      if (!isEditableField(event.target)) return;
+      scheduleVisibilityCheck(event.target);
+    });
+
+    form.addEventListener("focusout", () => {
+      window.setTimeout(() => {
+        if (!form.isConnected || form.contains(document.activeElement)) return;
+        updateKeyboardSpace();
+      }, 220);
+    });
+
     form.addEventListener("input", event => {
       if (event.target?.name === "sku") event.target.setCustomValidity("");
     });
@@ -133,8 +203,25 @@
     form.addEventListener("invalid", event => {
       const invalidStep = steps.findIndex(step => step.contains(event.target));
       if (invalidStep >= 0 && invalidStep !== activeIndex) showStep(invalidStep, { focus: false });
+      scheduleVisibilityCheck(event.target, 80);
     }, true);
 
+    if (window.visualViewport) {
+      const handleViewportChange = () => {
+        if (!form.isConnected) {
+          window.visualViewport.removeEventListener("resize", handleViewportChange);
+          window.visualViewport.removeEventListener("scroll", handleViewportChange);
+          return;
+        }
+        updateKeyboardSpace();
+        requestAnimationFrame(() => keepFieldVisible(document.activeElement, "auto"));
+      };
+
+      window.visualViewport.addEventListener("resize", handleViewportChange);
+      window.visualViewport.addEventListener("scroll", handleViewportChange);
+    }
+
+    updateKeyboardSpace();
     showStep(0, { focus: false });
   }
 
