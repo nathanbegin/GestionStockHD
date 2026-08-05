@@ -111,8 +111,15 @@ function validSessionId(value) {
 }
 
 function parseDate(value) {
-  const date = new Date(value || 0);
+  if (!value) return null;
+  const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function validPresenceTime(date, now = Date.now()) {
+  if (!date) return false;
+  const time = date.getTime();
+  return time <= now + 300000 && now - time <= PRESENCE_RETENTION_MS;
 }
 
 function cleanDevice(raw = {}) {
@@ -132,8 +139,9 @@ function cleanPresenceRow(row, now = Date.now()) {
   const userId = cleanText(snapshot.user_id, 80);
   const sessionId = validSessionId(snapshot.session_id);
   const lastSeen = parseDate(snapshot.last_seen_at || row?.updated_at);
-  if (!userId || !sessionId || !lastSeen || now - lastSeen.getTime() > PRESENCE_RETENTION_MS) return null;
-  const started = parseDate(snapshot.started_at) || lastSeen;
+  if (!userId || !sessionId || !validPresenceTime(lastSeen, now)) return null;
+  const parsedStarted = parseDate(snapshot.started_at);
+  const started = validPresenceTime(parsedStarted, now) ? parsedStarted : lastSeen;
   return {
     userId,
     sessionId,
@@ -150,6 +158,7 @@ async function savePresence(ctx, action) {
   if (!sessionId) throw Object.assign(new Error("Session de présence invalide"), { status: 400 });
 
   const now = new Date();
+  const nowMs = now.getTime();
   const rowId = presenceRowId(ctx.user.id, sessionId);
   const { data: existing, error: existingError } = await ctx.supabase
     .from("app_state")
@@ -160,12 +169,8 @@ async function savePresence(ctx, action) {
 
   const requestedStart = parseDate(ctx.requestBody?.startedAt);
   const existingStart = parseDate(existing?.snapshot?.started_at);
-  const acceptableStart = requestedStart &&
-    requestedStart.getTime() <= now.getTime() + 300000 &&
-    now.getTime() - requestedStart.getTime() <= PRESENCE_RETENTION_MS
-    ? requestedStart
-    : now;
-  const startedAt = existingStart || acceptableStart;
+  const acceptableStart = validPresenceTime(requestedStart, nowMs) ? requestedStart : now;
+  const startedAt = validPresenceTime(existingStart, nowMs) ? existingStart : acceptableStart;
 
   const snapshot = {
     user_id: ctx.user.id,
