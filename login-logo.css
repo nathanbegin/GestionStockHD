@@ -1,0 +1,21 @@
+.auth-brand .brand-logo {
+  width: 58px;
+  height: 58px;
+  flex: 0 0 58px;
+  display: block;
+  padding: 0;
+  border-radius: 12px;
+  background: #f96302;
+  object-fit: cover;
+  object-position: center;
+  box-shadow: 0 6px 18px rgba(92, 46, 18, .16);
+}
+
+@media (max-width: 480px) {
+  .auth-brand .brand-logo {
+    width: 52px;
+    height: 52px;
+    flex-basis: 52px;
+    border-radius: 10px;
+  }
+}
