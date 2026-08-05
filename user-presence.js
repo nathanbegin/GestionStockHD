@@ -1,8 +1,9 @@
 (() => {
-  const SESSION_ID_KEY = "restock_presence_session_id_v2";
-  const SESSION_STARTED_KEY = "restock_presence_started_at_v2";
+  const SESSION_ID_KEY = "restock_presence_session_id_v3";
+  const SESSION_STARTED_KEY = "restock_presence_started_at_v3";
   const HEARTBEAT_INTERVAL = 45000;
-  const LIST_REFRESH_INTERVAL = 30000;
+  const LIST_REFRESH_INTERVAL = 120000;
+  const MAX_SESSION_AGE_MS = 7 * 24 * 60 * 60 * 1000;
   const ROLE_LABELS = { employee: "Employé", supervisor: "Superviseur", admin: "Administrateur" };
   let heartbeatTimer = null;
   let listTimer = null;
@@ -34,12 +35,17 @@
   function sessionIdentity() {
     let sessionId = sessionStorage.getItem(SESSION_ID_KEY);
     let startedAt = sessionStorage.getItem(SESSION_STARTED_KEY);
-    if (!sessionId) {
+    const now = Date.now();
+    const startedTime = new Date(startedAt || "").getTime();
+    const validSessionId = /^[a-zA-Z0-9._-]{8,100}$/.test(String(sessionId || ""));
+    const validStartedAt = Number.isFinite(startedTime) &&
+      startedTime <= now + 300000 &&
+      now - startedTime <= MAX_SESSION_AGE_MS;
+
+    if (!validSessionId || !validStartedAt) {
       sessionId = createSessionId();
+      startedAt = new Date(now).toISOString();
       sessionStorage.setItem(SESSION_ID_KEY, sessionId);
-    }
-    if (!startedAt) {
-      startedAt = new Date().toISOString();
       sessionStorage.setItem(SESSION_STARTED_KEY, startedAt);
     }
     return { sessionId, startedAt };
@@ -115,21 +121,31 @@
     })[character]);
   }
 
+  function validDisplayDate(value) {
+    if (!value) return null;
+    const date = new Date(value);
+    const time = date.getTime();
+    if (!Number.isFinite(time) || time < Date.UTC(2020, 0, 1) || time > Date.now() + 86400000) return null;
+    return date;
+  }
+
   function formatDate(value) {
-    if (!value) return "Jamais";
+    const date = validDisplayDate(value);
+    if (!date) return "Heure inconnue";
     try {
       return new Intl.DateTimeFormat("fr-CA", {
         dateStyle: "medium",
         timeStyle: "short"
-      }).format(new Date(value));
+      }).format(date);
     } catch {
-      return "—";
+      return "Heure inconnue";
     }
   }
 
   function relativeTime(value) {
-    if (!value) return "Jamais";
-    const seconds = Math.round((new Date(value).getTime() - Date.now()) / 1000);
+    const date = validDisplayDate(value);
+    if (!date) return "heure inconnue";
+    const seconds = Math.round((date.getTime() - Date.now()) / 1000);
     const formatter = new Intl.RelativeTimeFormat("fr", { numeric: "auto" });
     const absolute = Math.abs(seconds);
     if (absolute < 60) return formatter.format(seconds, "second");
@@ -179,7 +195,7 @@
     const online = users.filter(user => user.online);
     const offline = users.filter(user => !user.online);
     panel.innerHTML = `
-      <div class="section-head presence-heading"><div><h2>Connexions à l’application</h2><p class="muted">Présence estimée à partir d’un signal envoyé environ chaque minute.</p></div><button class="button compact" type="button" data-presence-action="refresh">Actualiser</button></div>
+      <div class="section-head presence-heading"><div><h2>Connexions à l’application</h2><p class="muted">Liste actualisée automatiquement toutes les 2 minutes, ou immédiatement avec le bouton Actualiser.</p></div><button class="button compact" type="button" data-presence-action="refresh">Actualiser</button></div>
       <div class="presence-summary"><div><strong>${online.length}</strong><span>en ligne</span></div><div><strong>${users.length}</strong><span>comptes approuvés</span></div><div><strong>${formatDate(data.serverTime)}</strong><span>heure du serveur</span></div></div>
       ${online.length ? `<div class="presence-online-grid">${online.map(onlineCard).join("")}</div>` : `<div class="card empty"><h3>Personne n’est en ligne</h3><p>Les utilisateurs apparaîtront ici après leur prochain signal de présence.</p></div>`}
       <details class="card presence-offline-details"><summary>Dernières connexions (${offline.length})</summary><div class="presence-offline-list">${offline.map(offlineRow).join("")}</div></details>
@@ -299,7 +315,9 @@
     });
 
     document.addEventListener("click", event => {
-      if (event.target.closest("[data-presence-action='refresh']")) refreshPresence();
+      if (event.target.closest("[data-presence-action='refresh']")) {
+        sendPresence("presenceHeartbeat").then(refreshPresence);
+      }
       if (event.target.closest("#logoutButton, [data-auth-action='logout']")) sendPresence("presenceOffline", true);
     }, true);
 
