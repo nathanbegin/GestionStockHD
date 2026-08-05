@@ -10,6 +10,13 @@
           <path d="M4 5h8M4 9h8M4 13h6"/>
           <path d="M15 13V8.5a1.5 1.5 0 0 1 3 0V14l1.2-.9a1.4 1.4 0 0 1 1.9 2l-2.8 3.5a3.5 3.5 0 0 1-2.7 1.4h-1.4a3 3 0 0 1-2.1-.9l-2.2-2.2a1.4 1.4 0 0 1 2-2l1.1 1.1v-2.5a1.5 1.5 0 0 1 2-1.4"/>
         </g>
+      </svg>`,
+    logout: `
+      <svg class="ui-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M10 4H5.5A1.5 1.5 0 0 0 4 5.5v13A1.5 1.5 0 0 0 5.5 20H10"/>
+          <path d="M13 8l4 4-4 4M17 12H8"/>
+        </g>
       </svg>`
   };
 
@@ -17,12 +24,13 @@
     if (!element || element.dataset.uiIcon === iconName) return;
     element.innerHTML = ICONS[iconName];
     element.dataset.uiIcon = iconName;
-    element.setAttribute("aria-hidden", "true");
+    if (!element.matches("button")) element.setAttribute("aria-hidden", "true");
   }
 
   function updateStaticNavigation() {
     setIcon(document.querySelector('[data-nav="scan"] > span'), "camera");
     setIcon(document.querySelector('[data-nav="pickups"] > span'), "pickupHand");
+    setIcon(document.querySelector("#logoutButton"), "logout");
   }
 
   function updateQuickActions() {
@@ -62,6 +70,23 @@
       .action-card > .icon[data-ui-icon] .ui-icon-svg {
         width: 2.15rem;
         height: 2.15rem;
+      }
+      .logout-button[data-ui-icon] {
+        display: grid;
+        place-items: center;
+        min-width: 48px;
+        min-height: 48px;
+        padding: 0;
+        font-size: 0;
+      }
+      .logout-button[data-ui-icon]::before,
+      .logout-button[data-ui-icon]::after {
+        content: none !important;
+        display: none !important;
+      }
+      .logout-button[data-ui-icon] .ui-icon-svg {
+        width: 1.5rem;
+        height: 1.5rem;
       }
     `;
     document.head.append(style);
