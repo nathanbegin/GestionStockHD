@@ -1,8 +1,100 @@
 (() => {
   const FORM_IDS = new Set(["itemForm", "scanForm"]);
+  const ENTRY_MODE_KEY = "restock_item_entry_mode_v1";
   const KEYBOARD_THRESHOLD = 120;
   const FIELD_TOP_GAP = 96;
   const FIELD_BOTTOM_GAP = 28;
+  const ENTRY_MODES = new Set(["guided", "form"]);
+
+  function currentEntryMode() {
+    const stored = localStorage.getItem(ENTRY_MODE_KEY);
+    return ENTRY_MODES.has(stored) ? stored : "guided";
+  }
+
+  function guidedModeEnabled() {
+    return currentEntryMode() === "guided";
+  }
+
+  function saveEntryMode(mode) {
+    const normalized = ENTRY_MODES.has(mode) ? mode : "guided";
+    localStorage.setItem(ENTRY_MODE_KEY, normalized);
+    return normalized;
+  }
+
+  function enhanceEntryModeSettings() {
+    const grid = document.querySelector(".settings-grid");
+    if (!grid || grid.querySelector("[data-entry-mode-settings]")) return;
+
+    const mode = currentEntryMode();
+    const card = document.createElement("article");
+    card.className = "card";
+    card.dataset.entryModeSettings = "true";
+    card.innerHTML = `
+      <h2>Mode d’ajout des articles</h2>
+      <p class="muted small">Choisis l’affichage utilisé lors de l’ajout ou de la modification d’un article. Cette préférence est enregistrée sur cet appareil.</p>
+      <div class="manage-list">
+        <label class="check-card">
+          <span><input type="radio" name="entryModePreference" value="guided" ${mode === "guided" ? "checked" : ""}> <strong>Mode guidé</strong></span>
+          <span class="field-hint">Une question à la fois avec les boutons Précédent et Suivant.</span>
+        </label>
+        <label class="check-card">
+          <span><input type="radio" name="entryModePreference" value="form" ${mode === "form" ? "checked" : ""}> <strong>Mode formulaire</strong></span>
+          <span class="field-hint">Tous les champs sont affichés dans un seul formulaire.</span>
+        </label>
+      </div>
+      <p class="small muted" data-entry-mode-status aria-live="polite"></p>
+    `;
+
+    const status = card.querySelector("[data-entry-mode-status]");
+    card.addEventListener("change", event => {
+      const input = event.target.closest('input[name="entryModePreference"]');
+      if (!input) return;
+      const selected = saveEntryMode(input.value);
+      status.textContent = selected === "guided"
+        ? "Mode guidé activé pour les prochains articles."
+        : "Mode formulaire activé pour les prochains articles.";
+    });
+
+    grid.append(card);
+  }
+
+  function moveGesFieldsToSalesLocation(form) {
+    const salesInput = form.querySelector('[name="salesLocation"]');
+    const salesPanel = salesInput?.closest("label");
+    const grid = form.querySelector(":scope > .form-grid");
+    if (!salesPanel || !grid) return;
+
+    const fields = [...grid.querySelectorAll(":scope > .ges-location-field")];
+    if (!fields.length) return;
+
+    let group = salesPanel.querySelector(":scope > .ges-location-panel-group");
+    if (!group) {
+      group = document.createElement("div");
+      group.className = "ges-location-panel-group";
+      group.setAttribute("aria-label", "Emplacements GES facultatifs");
+      salesPanel.append(group);
+    }
+
+    fields.forEach(field => {
+      field.hidden = false;
+      field.removeAttribute("aria-hidden");
+      field.classList.remove("article-wizard-step");
+      delete field.dataset.wizardStep;
+      group.append(field);
+    });
+
+    if (form.dataset.gesPanelNextReady !== "true") {
+      form.dataset.gesPanelNextReady = "true";
+      form.addEventListener("click", event => {
+        if (!event.target.closest(".article-wizard-next")) return;
+        group.querySelectorAll(".ges-location-field").forEach(field => {
+          const input = field.querySelector(".ges-location-input");
+          const add = field.querySelector(".ges-location-add");
+          if (input?.value.trim()) add?.click();
+        });
+      }, true);
+    }
+  }
 
   function directText(element) {
     return [...element.childNodes]
@@ -68,13 +160,17 @@
   }
 
   function initializeWizard(form) {
-    if (!FORM_IDS.has(form.id) || form.dataset.articleWizard === "ready") return;
+    if (!FORM_IDS.has(form.id)) return;
+    moveGesFieldsToSalesLocation(form);
+    if (!guidedModeEnabled() || form.dataset.articleWizard === "ready") return;
 
     const grid = form.querySelector(":scope > .form-grid");
     const finalActions = form.querySelector(":scope > .form-actions");
     if (!grid || !finalActions) return;
 
-    const steps = [...grid.children].filter(step => !step.matches('input[type="hidden"]'));
+    const steps = [...grid.children].filter(step =>
+      !step.matches('input[type="hidden"], .ges-location-field')
+    );
     if (steps.length < 2) return;
 
     form.dataset.articleWizard = "ready";
@@ -134,9 +230,7 @@
       if (rect.bottom > visibleBottom) movement = rect.bottom - visibleBottom;
       else if (rect.top < visibleTop) movement = rect.top - visibleTop;
 
-      if (Math.abs(movement) > 2) {
-        window.scrollBy({ top: movement, behavior });
-      }
+      if (Math.abs(movement) > 2) window.scrollBy({ top: movement, behavior });
     }
 
     function scheduleVisibilityCheck(field = document.activeElement, delay = 240) {
@@ -227,6 +321,7 @@
 
   function initializeVisibleForms() {
     document.querySelectorAll("#itemForm, #scanForm").forEach(initializeWizard);
+    enhanceEntryModeSettings();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
