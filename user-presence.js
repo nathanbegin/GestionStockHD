@@ -1,6 +1,6 @@
 (() => {
-  const SESSION_ID_KEY = "restock_presence_session_id_v1";
-  const SESSION_STARTED_KEY = "restock_presence_started_at_v1";
+  const SESSION_ID_KEY = "restock_presence_session_id_v2";
+  const SESSION_STARTED_KEY = "restock_presence_started_at_v2";
   const HEARTBEAT_INTERVAL = 45000;
   const LIST_REFRESH_INTERVAL = 30000;
   const ROLE_LABELS = { employee: "Employé", supervisor: "Superviseur", admin: "Administrateur" };
@@ -25,11 +25,17 @@
     return "";
   }
 
+  function createSessionId() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    const random = Math.random().toString(36).slice(2);
+    return `presence-${Date.now().toString(36)}-${random}`;
+  }
+
   function sessionIdentity() {
     let sessionId = sessionStorage.getItem(SESSION_ID_KEY);
     let startedAt = sessionStorage.getItem(SESSION_STARTED_KEY);
     if (!sessionId) {
-      sessionId = crypto.randomUUID();
+      sessionId = createSessionId();
       sessionStorage.setItem(SESSION_ID_KEY, sessionId);
     }
     if (!startedAt) {
@@ -61,14 +67,17 @@
   async function presenceFetch(options = {}) {
     const token = storedAccessToken();
     if (!token) throw new Error("Session absente");
-    const response = await fetch("/api/presence", {
-      method: options.method || "GET",
+    const method = options.method || "GET";
+    const endpoint = method === "GET" ? "/api/users?view=presence" : "/api/users";
+    const response = await fetch(endpoint, {
+      method,
       headers: {
         Authorization: `Bearer ${token}`,
         "Content-Type": "application/json"
       },
       body: options.body ? JSON.stringify(options.body) : undefined,
-      keepalive: Boolean(options.keepalive)
+      keepalive: Boolean(options.keepalive),
+      cache: "no-store"
     });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
@@ -79,8 +88,8 @@
     return data;
   }
 
-  async function sendPresence(action = "heartbeat", keepalive = false) {
-    if (heartbeatInFlight && action === "heartbeat") return;
+  async function sendPresence(action = "presenceHeartbeat", keepalive = false) {
+    if (heartbeatInFlight && action === "presenceHeartbeat") return;
     const token = storedAccessToken();
     const appShell = document.querySelector("#appShell");
     if (!token || !appShell || appShell.hidden) return;
@@ -200,8 +209,8 @@
       const data = await presenceFetch();
       renderPanel(panel, data);
     } catch (error) {
-      if (error.status === 403) panel.remove();
-      else panel.innerHTML = `<div class="card"><h2>Connexions indisponibles</h2><p class="muted">${escapeHTML(error.message)}</p><button class="button" type="button" data-presence-action="refresh">Réessayer</button></div>`;
+      const title = error.status === 403 ? "Accès à la présence refusé" : "Connexions indisponibles";
+      panel.innerHTML = `<div class="card"><h2>${title}</h2><p class="muted">${escapeHTML(error.message)}</p><button class="button" type="button" data-presence-action="refresh">Réessayer</button></div>`;
     } finally {
       presenceRequestInFlight = false;
     }
@@ -252,15 +261,20 @@
     const token = storedAccessToken();
     const appShell = document.querySelector("#appShell");
     if (!token || !appShell || appShell.hidden) return false;
-    sendPresence("heartbeat");
+
+    sendPresence("presenceHeartbeat");
     clearInterval(heartbeatTimer);
     heartbeatTimer = setInterval(() => {
-      if (document.visibilityState === "visible") sendPresence("heartbeat");
+      if (document.visibilityState === "visible") sendPresence("presenceHeartbeat");
     }, HEARTBEAT_INTERVAL);
+
     clearInterval(listTimer);
     listTimer = setInterval(() => {
-      if (document.visibilityState === "visible" && document.querySelector("#pageTitle")?.textContent?.trim() === "Utilisateurs") refreshPresence();
+      if (document.visibilityState === "visible" && document.querySelector("#pageTitle")?.textContent?.trim() === "Utilisateurs") {
+        refreshPresence();
+      }
     }, LIST_REFRESH_INTERVAL);
+
     refreshPresence();
     return true;
   }
@@ -269,25 +283,26 @@
     installStyles();
     startTimer = setInterval(() => {
       if (start()) clearInterval(startTimer);
-    }, 2000);
+    }, 1500);
+    start();
 
     const appMain = document.querySelector("#appMain");
-    if (appMain) new MutationObserver(() => refreshPresence()).observe(appMain, { childList: true, subtree: false });
+    if (appMain) new MutationObserver(() => refreshPresence()).observe(appMain, { childList: true, subtree: true });
     const pageTitle = document.querySelector("#pageTitle");
     if (pageTitle) new MutationObserver(() => refreshPresence()).observe(pageTitle, { childList: true, characterData: true, subtree: true });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
-        sendPresence("heartbeat");
+        sendPresence("presenceHeartbeat");
         refreshPresence();
       }
     });
 
     document.addEventListener("click", event => {
       if (event.target.closest("[data-presence-action='refresh']")) refreshPresence();
-      if (event.target.closest("#logoutButton, [data-auth-action='logout']")) sendPresence("offline", true);
+      if (event.target.closest("#logoutButton, [data-auth-action='logout']")) sendPresence("presenceOffline", true);
     }, true);
 
-    window.addEventListener("pagehide", () => sendPresence("offline", true));
+    window.addEventListener("pagehide", () => sendPresence("presenceOffline", true));
   });
 })();
