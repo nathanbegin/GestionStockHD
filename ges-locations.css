@@ -1,0 +1,99 @@
+.ges-location-field {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbf7f4;
+  min-width: 0;
+}
+
+.ges-location-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-top: 8px;
+}
+
+.ges-location-entry input {
+  min-width: 0;
+}
+
+.ges-location-tags,
+.ges-location-display-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 7px;
+  margin-top: 10px;
+}
+
+.ges-location-tags:empty {
+  display: none;
+}
+
+.ges-location-tag,
+.ges-location-display-tag {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border-radius: 999px;
+  background: var(--surface-2);
+  color: #624b3d;
+  font-size: 12px;
+  font-weight: 750;
+  line-height: 1.2;
+}
+
+.ges-location-tag {
+  gap: 6px;
+  padding: 6px 6px 6px 10px;
+}
+
+.ges-location-tag > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.ges-location-remove {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 24px;
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(43, 33, 28, .09);
+  color: var(--text);
+  font-size: 18px;
+  line-height: 1;
+  padding: 0;
+}
+
+.ges-location-remove:hover,
+.ges-location-remove:focus-visible {
+  background: rgba(161, 61, 61, .14);
+  color: var(--danger);
+}
+
+.ges-location-display {
+  min-width: 0;
+}
+
+.ges-location-display-tags {
+  margin-top: 4px;
+}
+
+.ges-location-display-tag {
+  padding: 5px 9px;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .ges-location-entry {
+    grid-template-columns: 1fr;
+  }
+
+  .ges-location-entry .button {
+    width: 100%;
+  }
+}
