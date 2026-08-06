@@ -5,18 +5,28 @@ import {
   markAllNotificationsRead,
   markNotificationRead
 } from "../lib/notifications.js";
+import {
+  getWebPushClientConfig,
+  removeAllPushSubscriptions,
+  removePushSubscription,
+  savePushSubscription
+} from "../lib/web-push.js";
 
 export default async function handler(request, response) {
   try {
     const view = String(request.query?.view || "");
-    const notificationsRequest = view === "notifications" || request.method === "POST";
+    const protectedRequest = ["notifications", "push-config"].includes(view) || request.method === "POST";
     const { supabase, profile, user } = await getAuthContext(request, {
-      allowPending: !notificationsRequest
+      allowPending: !protectedRequest
     });
 
     if (request.method === "GET" && view === "notifications") {
       await ensureAssignmentNotifications(supabase, user.id);
       return json(response, 200, await listUserNotifications(supabase, user.id));
+    }
+
+    if (request.method === "GET" && view === "push-config") {
+      return json(response, 200, await getWebPushClientConfig(supabase, user.id));
     }
 
     if (request.method === "POST") {
@@ -27,6 +37,23 @@ export default async function handler(request, response) {
       }
       if (action === "notificationReadAll") {
         const result = await markAllNotificationsRead(supabase, user.id);
+        return json(response, 200, result);
+      }
+      if (action === "pushSubscribe") {
+        const result = await savePushSubscription(
+          supabase,
+          user.id,
+          request.body?.subscription,
+          request.body?.device
+        );
+        return json(response, 200, result);
+      }
+      if (action === "pushUnsubscribe") {
+        const result = await removePushSubscription(supabase, user.id, request.body?.endpoint);
+        return json(response, 200, result);
+      }
+      if (action === "pushUnsubscribeAll") {
+        const result = await removeAllPushSubscriptions(supabase, user.id);
         return json(response, 200, result);
       }
       return json(response, 400, { error: "Action de notification inconnue" });
@@ -43,6 +70,7 @@ export default async function handler(request, response) {
       bootstrapAvailable: Number(count || 0) === 0 && Boolean(process.env.APP_PIN)
     });
   } catch (error) {
+    if (error?.status === 400) return json(response, 400, { error: error.message });
     return sendError(response, error, "Impossible de charger le profil ou les notifications");
   }
 }
