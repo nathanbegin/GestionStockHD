@@ -1,4 +1,5 @@
 import { getAuthContext, json, sendError } from "../lib/auth.js";
+import { createAssignmentNotifications } from "../lib/notifications.js";
 
 const DEFAULT_DEPARTMENTS_VERSION = 2;
 const DEFAULT_DEPARTMENTS = [
@@ -72,12 +73,9 @@ function applyRoleRestrictions(local, cloud, profile, user) {
   const remote = cloud && typeof cloud === "object" ? cloud : {};
   if (profile.role === "admin") return safe;
 
-  // Les réglages globaux sont réservés aux administrateurs.
   if (remote.settings) safe.settings = clone(remote.settings);
   if (profile.role === "supervisor") return safe;
 
-  // Un employé peut travailler sur les articles, mais pas administrer la structure
-  // du magasin ni modifier les affectations d'articles.
   if (Array.isArray(remote.lists) && remote.lists.length) safe.lists = clone(remote.lists);
   if (Array.isArray(remote.departments) && remote.departments.length) safe.departments = clone(remote.departments);
   safe.deletedListIds = clone(remote.deletedListIds || []);
@@ -93,8 +91,6 @@ function applyRoleRestrictions(local, cloud, profile, user) {
     };
   });
 
-  // Les listes créées par l'employé restent modifiables par lui et lui sont
-  // attribuées automatiquement. Les autres listes sont reprises du cloud.
   const cloudPickups = (remote.pickupLists || []).filter(x => x?.id);
   const cloudPickupById = new Map(cloudPickups.map(x => [x.id, x]));
   const ownLocal = (safe.pickupLists || [])
@@ -276,17 +272,35 @@ export default async function handler(request, response) {
     const merged = mergeSnapshots(restricted, cloud);
     const withDefaultDepartments = needsDepartmentMigration ? ensureDefaultDepartments(merged) : merged;
 
-    // Les profils Supabase approuvés sont la source de vérité pour les comptes.
-    // Les employés ajoutés manuellement (isAccount=false) restent disponibles.
     const { data: approvedProfiles, error: profilesError } = await supabase
       .from("profiles")
       .select("id")
       .eq("approval_status", "approved");
     if (profilesError) throw profilesError;
-    const cleaned = removeInactiveAccountEmployees(withDefaultDepartments, (approvedProfiles || []).map(row => row.id));
+    const approvedUserIds = (approvedProfiles || []).map(row => row.id);
+    const cleaned = removeInactiveAccountEmployees(withDefaultDepartments, approvedUserIds);
 
-    const { error: writeError } = await supabase.from("app_state").upsert({ id: "default", snapshot: cleaned, updated_at: new Date().toISOString() });
+    const { error: writeError } = await supabase.from("app_state").upsert({
+      id: "default",
+      snapshot: cleaned,
+      updated_at: new Date().toISOString()
+    });
     if (writeError) throw writeError;
+
+    if (cloud) {
+      try {
+        await createAssignmentNotifications(supabase, {
+          before: cloud,
+          after: cleaned,
+          actorUserId: user.id,
+          actorName: profile.full_name || user.user_metadata?.full_name || user.email || "Système",
+          approvedUserIds
+        });
+      } catch (notificationError) {
+        console.warn("Création des notifications d’attribution", notificationError?.message || notificationError);
+      }
+    }
+
     return json(response, 200, { snapshot: cleaned });
   } catch (error) {
     return sendError(response, error, "Erreur de synchronisation");
