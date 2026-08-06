@@ -1,4 +1,5 @@
 import { getAuthContext, json, roleAtLeast, sendError } from "../lib/auth.js";
+import { deleteUserAccount } from "../lib/delete-user.js";
 
 const VALID_ROLES = new Set(["employee", "supervisor", "admin"]);
 const VALID_STATUSES = new Set(["pending", "approved", "rejected"]);
@@ -368,6 +369,22 @@ export default async function handler(request, response) {
     const targetRoles = normalizeRoles(targetAuthUser?.app_metadata?.roles, target.role);
     if (targetRoles.includes("admin") && !admin && target.id !== ctx.user.id) {
       return json(response, 403, { error: "Un superviseur ne peut pas modifier un administrateur" });
+    }
+
+    if (action === "delete") {
+      if (!admin) return json(response, 403, { error: "Seul un administrateur peut supprimer un compte" });
+      try {
+        const result = await deleteUserAccount(ctx.supabase, {
+          actorUserId: ctx.user.id,
+          target,
+          targetAuthUser,
+          targetRoles
+        });
+        return json(response, 200, result);
+      } catch (error) {
+        if (error?.status) return json(response, error.status, { error: error.message });
+        throw error;
+      }
     }
 
     const patch = { updated_at: now };
