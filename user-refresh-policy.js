@@ -110,13 +110,15 @@
     }
 
     if (!savedManagement || savedManagement.isConnected) return;
-    if (appMain.textContent.includes("Gestion des utilisateurs indisponible")) return;
 
+    const wasAutomaticRefresh = automaticRefresh;
+    automaticRefresh = false;
     restoring = true;
     const scrollY = window.scrollY;
     appMain.replaceChildren(savedManagement);
     window.scrollTo({ top: scrollY, behavior: "auto" });
     restoring = false;
+    if (wasAutomaticRefresh) scheduleRefresh(DEFERRED_REFRESH_DELAY);
   }
 
   async function runGeneralRefresh() {
