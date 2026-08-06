@@ -25,7 +25,8 @@
     const title = picker?.closest(".full")?.querySelector(".field-title");
     if (!title) return;
     const count = form.querySelectorAll('input[name="pickupItemIds"]:checked').length;
-    title.textContent = `Articles inclus (${count})`;
+    const nextText = `Articles inclus (${count})`;
+    if (title.textContent !== nextText) title.textContent = nextText;
   }
 
   function installExplanation(form) {
