@@ -150,7 +150,7 @@
     backdrop.addEventListener("click", event => {
       const choice = event.target.closest("[data-push-prompt-choice]")?.dataset.pushPromptChoice;
       if (choice === "accept") {
-        rememberChoice(userId, "accepted");
+        rememberChoice(userId, install ? "install" : "accepted");
         closePrompt();
         if (install) {
           window.setTimeout(() => document.querySelector("#notificationBellButton")?.click(), 50);
@@ -195,7 +195,10 @@
       promptedUserId = userId;
       return;
     }
-    if (storedChoice(userId)) {
+
+    const choice = storedChoice(userId);
+    const completedChoice = choice && !(choice === "install" && mode === "activate");
+    if (completedChoice) {
       promptedUserId = userId;
       return;
     }
