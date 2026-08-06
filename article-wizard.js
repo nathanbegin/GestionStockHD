@@ -1,6 +1,8 @@
 (() => {
   const FORM_IDS = new Set(["itemForm", "scanForm"]);
   const ENTRY_MODE_KEY = "restock_item_entry_mode_v1";
+  const STORAGE_KEY = "restock_app_v1";
+  const QUANTITY_VALIDATE_MARKER = "⁣​⁣‌⁣";
   const KEYBOARD_THRESHOLD = 120;
   const FIELD_TOP_GAP = 96;
   const FIELD_BOTTOM_GAP = 28;
@@ -96,6 +98,110 @@
     }
   }
 
+  function stripQuantityValidationMarker(value) {
+    return String(value || "").split(QUANTITY_VALIDATE_MARKER).join("");
+  }
+
+  function hasQuantityValidationMarker(value) {
+    return String(value || "").includes(QUANTITY_VALIDATE_MARKER);
+  }
+
+  function clampQuantity(input, value) {
+    const min = Number(input.min || 1);
+    const max = Number(input.max || 999);
+    const numeric = Number.isFinite(Number(value)) ? Number(value) : min;
+    return Math.max(min, Math.min(max, Math.round(numeric)));
+  }
+
+  function enhanceQuantityField(form) {
+    const input = form.querySelector('input[name="quantity"]');
+    const host = input?.closest("label");
+    if (!input || !host || input.dataset.quantityControlsReady === "true") return;
+
+    input.dataset.quantityControlsReady = "true";
+    input.classList.add("quantity-stepper-input");
+    input.setAttribute("aria-label", "Quantité à remplir");
+
+    const note = form.querySelector('textarea[name="note"]');
+    const initiallyFlagged = hasQuantityValidationMarker(note?.value);
+    if (note) note.value = stripQuantityValidationMarker(note.value);
+
+    const row = document.createElement("div");
+    row.className = "quantity-stepper";
+    input.before(row);
+    row.append(input);
+
+    const arrows = document.createElement("div");
+    arrows.className = "quantity-stepper-arrows";
+    arrows.setAttribute("aria-label", "Modifier la quantité sans ouvrir le clavier");
+    arrows.innerHTML = `
+      <button type="button" class="quantity-stepper-button" data-quantity-delta="1" aria-label="Augmenter la quantité">▲</button>
+      <button type="button" class="quantity-stepper-button" data-quantity-delta="-1" aria-label="Diminuer la quantité">▼</button>
+    `;
+    row.append(arrows);
+
+    const validationOption = document.createElement("div");
+    validationOption.className = "quantity-validation-option";
+    validationOption.innerHTML = `
+      <input type="checkbox" class="quantity-validation-checkbox" aria-label="Marquer la quantité à valider" ${initiallyFlagged ? "checked" : ""}>
+      <span><strong>Quantité à valider</strong><small>Ajoute un signalement visible sur l’article.</small></span>
+    `;
+    host.append(validationOption);
+
+    const flagCheckbox = validationOption.querySelector(".quantity-validation-checkbox");
+
+    arrows.addEventListener("click", event => {
+      const button = event.target.closest("[data-quantity-delta]");
+      if (!button) return;
+      const delta = Number(button.dataset.quantityDelta || 0);
+      input.value = String(clampQuantity(input, Number(input.value || input.min || 1) + delta));
+      input.dispatchEvent(new Event("input", { bubbles: true }));
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    });
+
+    form.addEventListener("formdata", event => {
+      const cleanNote = stripQuantityValidationMarker(note?.value || "");
+      event.formData.set(
+        "note",
+        flagCheckbox.checked ? `${cleanNote}${QUANTITY_VALIDATE_MARKER}` : cleanNote
+      );
+    });
+  }
+
+  function flaggedItemIds() {
+    try {
+      const snapshot = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
+      return new Set((snapshot?.items || [])
+        .filter(item => item?.id && hasQuantityValidationMarker(item.note))
+        .map(item => String(item.id)));
+    } catch {
+      return new Set();
+    }
+  }
+
+  function decorateQuantityValidationFlags() {
+    const ids = flaggedItemIds();
+    document.querySelectorAll("[data-quantity-validation-badge]").forEach(badge => {
+      const card = badge.closest(".card");
+      const idElement = card?.querySelector("[data-id]");
+      if (!idElement || !ids.has(String(idElement.dataset.id || ""))) badge.remove();
+    });
+
+    ids.forEach(id => {
+      const selector = `[data-id="${CSS.escape(id)}"]`;
+      document.querySelectorAll(selector).forEach(element => {
+        const card = element.closest(".item-card, .tour-card, .card");
+        if (!card || card.querySelector("[data-quantity-validation-badge]")) return;
+        const host = card.querySelector(".tags") || card.querySelector(".item-top") || card;
+        const badge = document.createElement("span");
+        badge.className = "tag quantity-validation-badge";
+        badge.dataset.quantityValidationBadge = "true";
+        badge.textContent = "⚑ Quantité à valider";
+        host.append(badge);
+      });
+    });
+  }
+
   function directText(element) {
     return [...element.childNodes]
       .filter(node => node.nodeType === Node.TEXT_NODE)
@@ -162,6 +268,7 @@
   function initializeWizard(form) {
     if (!FORM_IDS.has(form.id)) return;
     moveGesFieldsToSalesLocation(form);
+    enhanceQuantityField(form);
     if (!guidedModeEnabled() || form.dataset.articleWizard === "ready") return;
 
     const grid = form.querySelector(":scope > .form-grid");
@@ -242,7 +349,7 @@
       }, delay);
     }
 
-    function showStep(index, { focus = true } = {}) {
+    function showStep(index, { focus = false } = {}) {
       activeIndex = Math.max(0, Math.min(index, steps.length - 1));
       steps.forEach((step, stepIndex) => {
         const active = stepIndex === activeIndex;
@@ -257,17 +364,27 @@
       nextButton.hidden = activeIndex === steps.length - 1;
       finalActions.hidden = activeIndex !== steps.length - 1;
 
+      header.scrollIntoView({ behavior: "smooth", block: "start" });
       if (focus) {
         const field = steps[activeIndex].querySelector("input:not([type='hidden']):not([type='file']), select, textarea, button");
         field?.focus({ preventScroll: true });
-        header.scrollIntoView({ behavior: "smooth", block: "start" });
         if (isEditableField(field)) scheduleVisibilityCheck(field, 280);
       }
     }
 
-    previousButton.addEventListener("click", () => showStep(activeIndex - 1));
+    function closeKeyboardBeforeNavigation() {
+      if (isEditableField(document.activeElement) && form.contains(document.activeElement)) {
+        document.activeElement.blur();
+      }
+    }
+
+    previousButton.addEventListener("click", () => {
+      closeKeyboardBeforeNavigation();
+      showStep(activeIndex - 1);
+    });
     nextButton.addEventListener("click", () => {
       if (!validateStep(steps[activeIndex])) return;
+      closeKeyboardBeforeNavigation();
       showStep(activeIndex + 1);
     });
 
@@ -322,6 +439,7 @@
   function initializeVisibleForms() {
     document.querySelectorAll("#itemForm, #scanForm").forEach(initializeWizard);
     enhanceEntryModeSettings();
+    decorateQuantityValidationFlags();
   }
 
   document.addEventListener("DOMContentLoaded", () => {
@@ -333,5 +451,9 @@
       });
     }
     initializeVisibleForms();
+  });
+
+  window.addEventListener("storage", event => {
+    if (event.key === STORAGE_KEY) decorateQuantityValidationFlags();
   });
 })();
