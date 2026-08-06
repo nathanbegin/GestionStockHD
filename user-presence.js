@@ -10,6 +10,9 @@
   let startTimer = null;
   let heartbeatInFlight = false;
   let presenceRequestInFlight = false;
+  let lastPresenceData = null;
+  let lastPresenceRefreshAt = 0;
+  let offlineDetailsOpen = false;
 
   function storedAccessToken() {
     for (const storage of [localStorage, sessionStorage]) {
@@ -191,6 +194,9 @@
   }
 
   function renderPanel(panel, data) {
+    const existingDetails = panel.querySelector(".presence-offline-details");
+    if (existingDetails) offlineDetailsOpen = existingDetails.open;
+
     const users = Array.isArray(data.users) ? data.users : [];
     const online = users.filter(user => user.online);
     const offline = users.filter(user => !user.online);
@@ -200,6 +206,9 @@
       ${online.length ? `<div class="presence-online-grid">${online.map(onlineCard).join("")}</div>` : `<div class="card empty"><h3>Personne n’est en ligne</h3><p>Les utilisateurs apparaîtront ici après leur prochain signal de présence.</p></div>`}
       <details class="card presence-offline-details"><summary>Dernières connexions (${offline.length})</summary><div class="presence-offline-list">${offline.map(offlineRow).join("")}</div></details>
     `;
+    panel.dataset.presenceReady = "true";
+    const nextDetails = panel.querySelector(".presence-offline-details");
+    if (nextDetails) nextDetails.open = offlineDetailsOpen;
   }
 
   function ensurePanel() {
@@ -211,24 +220,50 @@
       panel = document.createElement("section");
       panel.id = "userPresencePanel";
       panel.className = "section presence-panel";
-      panel.innerHTML = `<div class="card"><p class="muted">Chargement des connexions…</p></div>`;
+      if (lastPresenceData) renderPanel(panel, lastPresenceData);
+      else panel.innerHTML = `<div class="card"><p class="muted">Chargement des connexions…</p></div>`;
       management.prepend(panel);
     }
     return panel;
   }
 
-  async function refreshPresence() {
+  async function refreshPresence({ force = false } = {}) {
     const panel = ensurePanel();
     if (!panel || presenceRequestInFlight) return;
+    if (!force && lastPresenceData && Date.now() - lastPresenceRefreshAt < LIST_REFRESH_INTERVAL) return;
+
+    const refreshButton = panel.querySelector("[data-presence-action='refresh']");
+    if (refreshButton) {
+      refreshButton.disabled = true;
+      refreshButton.textContent = "Actualisation…";
+    }
+
     presenceRequestInFlight = true;
     try {
       const data = await presenceFetch();
-      renderPanel(panel, data);
+      lastPresenceData = data;
+      lastPresenceRefreshAt = Date.now();
+      const currentPanel = ensurePanel();
+      if (currentPanel) renderPanel(currentPanel, data);
     } catch (error) {
-      const title = error.status === 403 ? "Accès à la présence refusé" : "Connexions indisponibles";
-      panel.innerHTML = `<div class="card"><h2>${title}</h2><p class="muted">${escapeHTML(error.message)}</p><button class="button" type="button" data-presence-action="refresh">Réessayer</button></div>`;
+      const currentPanel = ensurePanel();
+      if (!currentPanel) return;
+      if (lastPresenceData) {
+        renderPanel(currentPanel, lastPresenceData);
+      } else {
+        const title = error.status === 403 ? "Accès à la présence refusé" : "Connexions indisponibles";
+        currentPanel.innerHTML = `<div class="card"><h2>${title}</h2><p class="muted">${escapeHTML(error.message)}</p><button class="button" type="button" data-presence-action="refresh">Réessayer</button></div>`;
+      }
     } finally {
       presenceRequestInFlight = false;
+    }
+  }
+
+  function mountPresencePanel() {
+    const panel = ensurePanel();
+    if (!panel) return;
+    if (!lastPresenceData || Date.now() - lastPresenceRefreshAt >= LIST_REFRESH_INTERVAL) {
+      refreshPresence({ force: true });
     }
   }
 
@@ -287,11 +322,11 @@
     clearInterval(listTimer);
     listTimer = setInterval(() => {
       if (document.visibilityState === "visible" && document.querySelector("#pageTitle")?.textContent?.trim() === "Utilisateurs") {
-        refreshPresence();
+        refreshPresence({ force: true });
       }
     }, LIST_REFRESH_INTERVAL);
 
-    refreshPresence();
+    mountPresencePanel();
     return true;
   }
 
@@ -303,20 +338,26 @@
     start();
 
     const appMain = document.querySelector("#appMain");
-    if (appMain) new MutationObserver(() => refreshPresence()).observe(appMain, { childList: true, subtree: true });
+    if (appMain) new MutationObserver(() => mountPresencePanel()).observe(appMain, { childList: true, subtree: false });
     const pageTitle = document.querySelector("#pageTitle");
-    if (pageTitle) new MutationObserver(() => refreshPresence()).observe(pageTitle, { childList: true, characterData: true, subtree: true });
+    if (pageTitle) new MutationObserver(() => mountPresencePanel()).observe(pageTitle, { childList: true, characterData: true, subtree: true });
 
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState === "visible") {
         sendPresence("presenceHeartbeat");
-        refreshPresence();
+        mountPresencePanel();
       }
     });
 
+    document.addEventListener("toggle", event => {
+      if (event.target.matches?.("#userPresencePanel .presence-offline-details")) {
+        offlineDetailsOpen = event.target.open;
+      }
+    }, true);
+
     document.addEventListener("click", event => {
       if (event.target.closest("[data-presence-action='refresh']")) {
-        sendPresence("presenceHeartbeat").then(refreshPresence);
+        sendPresence("presenceHeartbeat").then(() => refreshPresence({ force: true }));
       }
       if (event.target.closest("#logoutButton, [data-auth-action='logout']")) sendPresence("presenceOffline", true);
     }, true);
