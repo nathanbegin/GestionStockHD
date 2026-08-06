@@ -1,5 +1,21 @@
 import { getAuthContext, json, sendError } from "../lib/auth.js";
 
+const DEFAULT_DEPARTMENTS_VERSION = 2;
+const DEFAULT_DEPARTMENTS = [
+  { id: "dept-default-021-022", name: "Matériaux / Lumber", codes: ["021", "022"], aliases: ["Matériaux", "Lumber"] },
+  { id: "dept-default-023", name: "Couvre-plancher", codes: ["023"], aliases: [] },
+  { id: "dept-default-024", name: "Peinture", codes: ["024"], aliases: [] },
+  { id: "dept-default-025", name: "Quincaillerie", codes: ["025"], aliases: [] },
+  { id: "dept-default-026", name: "Plomberie", codes: ["026"], aliases: [] },
+  { id: "dept-default-027", name: "Électricité", codes: ["027"], aliases: [] },
+  { id: "dept-default-028", name: "Saisonnier", codes: ["028"], aliases: ["Jardinage"] },
+  { id: "dept-default-029", name: "Cuisine et salle de bain", codes: ["029"], aliases: [] },
+  { id: "dept-default-030", name: "Menuiserie", codes: ["030"], aliases: [] },
+  { id: "dept-default-031", name: "Services spéciaux", codes: ["031"], aliases: [] },
+  { id: "dept-default-070", name: "Électroménagers", codes: ["070"], aliases: [] },
+  { id: "dept-default-078", name: "Location d'outils", codes: ["078"], aliases: [] }
+];
+
 function latest(a, b) {
   return new Date(a?.updatedAt || a?.createdAt || 0) >= new Date(b?.updatedAt || b?.createdAt || 0) ? a : b;
 }
@@ -99,6 +115,54 @@ function applyRoleRestrictions(local, cloud, profile, user) {
   return safe;
 }
 
+function ensureDefaultDepartments(snapshot) {
+  const now = new Date().toISOString();
+  const departments = (snapshot.departments || []).map(entry => ({ ...entry }));
+  const items = (snapshot.items || []).map(item => ({ ...item }));
+  const deletedDepartmentIds = new Set(snapshot.deletedDepartmentIds || []);
+
+  for (const definition of DEFAULT_DEPARTMENTS) {
+    const acceptedNames = new Set([definition.name, ...definition.aliases].map(normalizeName));
+    const matches = departments.filter(entry => acceptedNames.has(normalizeName(entry.name)));
+    let target = matches.find(entry => normalizeName(entry.name) === normalizeName(definition.name)) || matches[0];
+
+    if (!target) {
+      let id = definition.id;
+      if (departments.some(entry => entry.id === id)) id = `${definition.id}-${Date.now().toString(36)}`;
+      target = { id, name: definition.name, codes: [...definition.codes], updatedAt: now };
+      departments.push(target);
+    }
+
+    target.name = definition.name;
+    target.codes = [...definition.codes];
+    target.updatedAt = now;
+    deletedDepartmentIds.delete(target.id);
+
+    for (const duplicate of matches) {
+      if (duplicate.id === target.id) continue;
+      for (const item of items) {
+        if (item.departmentId === duplicate.id) item.departmentId = target.id;
+      }
+      const duplicateIndex = departments.findIndex(entry => entry.id === duplicate.id);
+      if (duplicateIndex >= 0) departments.splice(duplicateIndex, 1);
+      deletedDepartmentIds.add(duplicate.id);
+    }
+  }
+
+  return {
+    ...snapshot,
+    departments,
+    items,
+    deletedDepartmentIds: [...deletedDepartmentIds],
+    meta: {
+      ...(snapshot.meta || {}),
+      updatedAt: now,
+      lastSyncAt: now,
+      departmentDefaultsVersion: DEFAULT_DEPARTMENTS_VERSION
+    }
+  };
+}
+
 function removeInactiveAccountEmployees(snapshot, approvedProfileIds = []) {
   const approvedIds = new Set(approvedProfileIds);
   const staleAccountIds = new Set(
@@ -186,7 +250,14 @@ function mergeSnapshots(local, cloud) {
       storeName: String(settingsWinner?.storeName || "Mon magasin"),
       keepPhotos: Boolean(settingsWinner?.keepPhotos)
     },
-    meta: { updatedAt: new Date().toISOString(), lastSyncAt: new Date().toISOString() }
+    meta: {
+      updatedAt: new Date().toISOString(),
+      lastSyncAt: new Date().toISOString(),
+      departmentDefaultsVersion: Math.max(
+        Number(local.meta?.departmentDefaultsVersion || 0),
+        Number(sourceCloud.meta?.departmentDefaultsVersion || 0)
+      )
+    }
   };
 }
 
@@ -200,8 +271,10 @@ export default async function handler(request, response) {
     const { data: rows, error: readError } = await supabase.from("app_state").select("snapshot").eq("id", "default");
     if (readError) throw readError;
     const cloud = rows?.[0]?.snapshot || null;
+    const needsDepartmentMigration = Number(cloud?.meta?.departmentDefaultsVersion || 0) < DEFAULT_DEPARTMENTS_VERSION;
     const restricted = applyRoleRestrictions(local, cloud, profile, user);
     const merged = mergeSnapshots(restricted, cloud);
+    const withDefaultDepartments = needsDepartmentMigration ? ensureDefaultDepartments(merged) : merged;
 
     // Les profils Supabase approuvés sont la source de vérité pour les comptes.
     // Les employés ajoutés manuellement (isAccount=false) restent disponibles.
@@ -210,7 +283,7 @@ export default async function handler(request, response) {
       .select("id")
       .eq("approval_status", "approved");
     if (profilesError) throw profilesError;
-    const cleaned = removeInactiveAccountEmployees(merged, (approvedProfiles || []).map(row => row.id));
+    const cleaned = removeInactiveAccountEmployees(withDefaultDepartments, (approvedProfiles || []).map(row => row.id));
 
     const { error: writeError } = await supabase.from("app_state").upsert({ id: "default", snapshot: cleaned, updated_at: new Date().toISOString() });
     if (writeError) throw writeError;
