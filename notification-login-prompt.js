@@ -1,37 +1,62 @@
 (() => {
-  const CHOICE_PREFIX = "restock_push_prompt_choice_v1:";
+  const CHOICE_PREFIX = "restock_push_prompt_session_choice_v2:";
+  const FALLBACK_SESSION_PREFIX = "restock_push_login_session_v1:";
+  const PUSH_OWNER_KEY = "restock_push_owner_v1";
   const PROMPT_DELAY = 1800;
   let promptTimer = null;
-  let promptedUserId = "";
+  let promptedSessionKey = "";
+  let evaluationInFlight = false;
 
-  function storedAccessToken() {
+  function storedAuthState() {
     for (const storage of [localStorage, sessionStorage]) {
       for (let index = 0; index < storage.length; index += 1) {
         const key = storage.key(index);
         if (!key || !key.startsWith("sb-") || !key.includes("auth-token")) continue;
         try {
           const parsed = JSON.parse(storage.getItem(key) || "null");
-          const token = parsed?.access_token || parsed?.currentSession?.access_token || parsed?.session?.access_token;
-          if (token) return token;
+          const session = parsed?.currentSession || parsed?.session || parsed;
+          const accessToken = session?.access_token || parsed?.access_token || "";
+          if (accessToken) return { accessToken };
         } catch { /* clé sans rapport */ }
       }
     }
-    return "";
+    return { accessToken: "" };
   }
 
-  function jwtSubject(token = storedAccessToken()) {
+  function jwtPayload(token) {
     try {
-      const part = token.split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
+      const part = String(token || "").split(".")[1].replace(/-/g, "+").replace(/_/g, "/");
       const padded = part.padEnd(Math.ceil(part.length / 4) * 4, "=");
-      return String(JSON.parse(atob(padded))?.sub || "");
+      return JSON.parse(atob(padded)) || {};
     } catch {
-      return "";
+      return {};
     }
+  }
+
+  function makeFallbackSessionId() {
+    if (crypto?.randomUUID) return crypto.randomUUID();
+    return `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  }
+
+  function authIdentity() {
+    const { accessToken } = storedAuthState();
+    const payload = jwtPayload(accessToken);
+    const userId = String(payload.sub || "");
+    if (!userId) return { userId: "", sessionId: "", key: "" };
+
+    let sessionId = String(payload.session_id || payload.sid || "");
+    if (!sessionId) {
+      const fallbackKey = `${FALLBACK_SESSION_PREFIX}${userId}`;
+      sessionId = localStorage.getItem(fallbackKey) || makeFallbackSessionId();
+      localStorage.setItem(fallbackKey, sessionId);
+    }
+
+    return { userId, sessionId, key: `${userId}:${sessionId}` };
   }
 
   function appIsAvailable() {
     const shell = document.querySelector("#appShell");
-    return Boolean(shell && !shell.hidden && storedAccessToken());
+    return Boolean(shell && !shell.hidden && storedAuthState().accessToken);
   }
 
   function isIOS() {
@@ -42,13 +67,20 @@
     return Boolean(window.matchMedia?.("(display-mode: standalone)")?.matches || navigator.standalone);
   }
 
-  function promptMode() {
+  async function currentPushMode(identity) {
     if (!window.isSecureContext) return "unsupported";
     if (isIOS() && !isStandalone()) return "install";
     if (!("Notification" in window)) return "unsupported";
-    if (Notification.permission === "granted") return "enabled";
     if (Notification.permission === "denied") return "blocked";
     if (!("serviceWorker" in navigator) || !("PushManager" in window)) return "unsupported";
+
+    try {
+      const registration = await navigator.serviceWorker.getRegistration();
+      const subscription = await registration?.pushManager?.getSubscription();
+      const owner = localStorage.getItem(PUSH_OWNER_KEY) || "";
+      if (subscription && owner === identity.userId) return "enabled";
+    } catch { /* l’activation pourra réessayer depuis le centre de notifications */ }
+
     return "activate";
   }
 
@@ -56,13 +88,34 @@
     return `${CHOICE_PREFIX}${userId}`;
   }
 
-  function rememberChoice(userId, choice) {
-    if (!userId) return;
-    localStorage.setItem(choiceKey(userId), choice);
+  function rememberChoice(identity, choice) {
+    if (!identity.userId || !identity.sessionId) return;
+    localStorage.setItem(choiceKey(identity.userId), JSON.stringify({
+      sessionId: identity.sessionId,
+      choice,
+      updatedAt: new Date().toISOString()
+    }));
   }
 
-  function storedChoice(userId) {
-    return userId ? localStorage.getItem(choiceKey(userId)) || "" : "";
+  function storedChoice(identity) {
+    if (!identity.userId || !identity.sessionId) return "";
+    try {
+      const record = JSON.parse(localStorage.getItem(choiceKey(identity.userId)) || "null");
+      return record?.sessionId === identity.sessionId ? String(record.choice || "") : "";
+    } catch {
+      return "";
+    }
+  }
+
+  function clearCurrentSessionMemory() {
+    const identity = authIdentity();
+    if (identity.userId) {
+      localStorage.removeItem(choiceKey(identity.userId));
+      localStorage.removeItem(`${FALLBACK_SESSION_PREFIX}${identity.userId}`);
+    }
+    promptedSessionKey = "";
+    clearTimeout(promptTimer);
+    closePrompt();
   }
 
   function installStyles() {
@@ -125,7 +178,7 @@
     trigger.remove();
   }
 
-  function showPrompt(userId, mode) {
+  function showPrompt(identity, mode) {
     if (!appIsAvailable() || document.querySelector("#notificationLoginPrompt")) return;
 
     const install = mode === "install";
@@ -144,13 +197,13 @@
           <button class="button primary wide" type="button" data-push-prompt-choice="accept">${install ? "Voir les instructions" : "Activer les notifications"}</button>
           <button class="button wide" type="button" data-push-prompt-choice="decline">Pas maintenant</button>
         </div>
-        <p class="notification-login-note">Ce choix sera mémorisé pour ce compte sur cet appareil. Il peut être modifié plus tard depuis la clochette.</p>
+        <p class="notification-login-note">Ce choix restera mémorisé pendant cette connexion. La question sera reposée seulement après une déconnexion suivie d’une nouvelle connexion.</p>
       </section>`;
 
     backdrop.addEventListener("click", event => {
       const choice = event.target.closest("[data-push-prompt-choice]")?.dataset.pushPromptChoice;
       if (choice === "accept") {
-        rememberChoice(userId, install ? "install" : "accepted");
+        rememberChoice(identity, install ? "install" : "accepted");
         closePrompt();
         if (install) {
           window.setTimeout(() => document.querySelector("#notificationBellButton")?.click(), 50);
@@ -160,14 +213,14 @@
         return;
       }
       if (choice === "decline" || event.target === backdrop) {
-        rememberChoice(userId, "declined");
+        rememberChoice(identity, "declined");
         closePrompt();
       }
     });
 
     backdrop.addEventListener("keydown", event => {
       if (event.key !== "Escape") return;
-      rememberChoice(userId, "declined");
+      rememberChoice(identity, "declined");
       closePrompt();
     });
 
@@ -175,36 +228,44 @@
     backdrop.querySelector('[data-push-prompt-choice="accept"]')?.focus({ preventScroll: true });
   }
 
-  function evaluatePrompt() {
-    if (!appIsAvailable()) return;
-    const userId = jwtSubject();
-    if (!userId || promptedUserId === userId) return;
+  async function evaluatePrompt() {
+    if (!appIsAvailable() || evaluationInFlight) return;
+    const identity = authIdentity();
+    if (!identity.key || promptedSessionKey === identity.key) return;
 
-    const mode = promptMode();
-    if (mode === "enabled") {
-      rememberChoice(userId, "accepted");
-      promptedUserId = userId;
-      return;
-    }
-    if (mode === "blocked") {
-      rememberChoice(userId, "blocked");
-      promptedUserId = userId;
-      return;
-    }
-    if (mode === "unsupported") {
-      promptedUserId = userId;
-      return;
-    }
+    evaluationInFlight = true;
+    try {
+      const mode = await currentPushMode(identity);
+      const latestIdentity = authIdentity();
+      if (!appIsAvailable() || latestIdentity.key !== identity.key) return;
 
-    const choice = storedChoice(userId);
-    const completedChoice = choice && !(choice === "install" && mode === "activate");
-    if (completedChoice) {
-      promptedUserId = userId;
-      return;
-    }
+      if (mode === "enabled") {
+        rememberChoice(identity, "accepted");
+        promptedSessionKey = identity.key;
+        return;
+      }
+      if (mode === "blocked") {
+        rememberChoice(identity, "blocked");
+        promptedSessionKey = identity.key;
+        return;
+      }
+      if (mode === "unsupported") {
+        promptedSessionKey = identity.key;
+        return;
+      }
 
-    promptedUserId = userId;
-    showPrompt(userId, mode);
+      const choice = storedChoice(identity);
+      const completedChoice = choice && !(choice === "install" && mode === "activate");
+      if (completedChoice) {
+        promptedSessionKey = identity.key;
+        return;
+      }
+
+      promptedSessionKey = identity.key;
+      showPrompt(identity, mode);
+    } finally {
+      evaluationInFlight = false;
+    }
   }
 
   function schedulePrompt(delay = PROMPT_DELAY) {
@@ -214,13 +275,19 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     installStyles();
+
+    document.addEventListener("click", event => {
+      const logout = event.target.closest("#logoutButton, [data-auth-action=\"logout\"], [data-action=\"logout\"]");
+      if (logout) clearCurrentSessionMemory();
+    }, true);
+
     const shell = document.querySelector("#appShell");
     if (shell) {
       new MutationObserver(() => {
         if (!shell.hidden) schedulePrompt();
         else {
           clearTimeout(promptTimer);
-          promptedUserId = "";
+          promptedSessionKey = "";
           closePrompt();
         }
       }).observe(shell, { attributes: true, attributeFilter: ["hidden"] });
