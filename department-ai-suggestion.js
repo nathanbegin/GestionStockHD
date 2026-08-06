@@ -2,6 +2,21 @@
   const STORAGE_KEY = "restock_app_v1";
   const ANALYZE_PATH = "/api/analyze";
   const MIN_VISIBLE_CONFIDENCE = 0.35;
+  const DEPARTMENT_CODES = [
+    { codes: ["21", "22"], names: ["Matériaux / Lumber", "Matériaux", "Lumber"] },
+    { codes: ["23"], names: ["Couvre-plancher"] },
+    { codes: ["24"], names: ["Peinture"] },
+    { codes: ["25"], names: ["Quincaillerie"] },
+    { codes: ["26"], names: ["Plomberie"] },
+    { codes: ["27"], names: ["Électricité"] },
+    { codes: ["28"], names: ["Saisonnier", "Jardinage"] },
+    { codes: ["29"], names: ["Cuisine et salle de bain"] },
+    { codes: ["30"], names: ["Menuiserie"] },
+    { codes: ["31"], names: ["Services spéciaux"] },
+    { codes: ["70"], names: ["Électroménagers"] },
+    { codes: ["78"], names: ["Location d'outils"] }
+  ];
+  const RECOGNIZED_CODES = DEPARTMENT_CODES.flatMap(definition => definition.codes).join("|");
   let suggestion = null;
   let refreshTimer = null;
 
@@ -46,14 +61,40 @@
     refreshTimer = window.setTimeout(enhanceScanForm, delay);
   }
 
+  function suggestionFromDepartmentCode(data) {
+    const visible = [data?.visibleText, data?.summary, data?.productName]
+      .map(value => String(value || ""))
+      .join(" ");
+    const matcher = new RegExp(`(?:^|[^A-Z0-9])R\\s*[-:]?\\s*0*(${RECOGNIZED_CODES})(?!\\d)`, "i");
+    const match = visible.match(matcher);
+    if (!match) return null;
+
+    const code = String(Number(match[1]));
+    const definition = DEPARTMENT_CODES.find(entry => entry.codes.includes(code));
+    if (!definition) return null;
+
+    const allowedNames = new Set(definition.names.map(normalize));
+    const configured = readDepartments().find(department => allowedNames.has(normalize(department.name)));
+    if (!configured) return null;
+
+    return {
+      name: configured.name,
+      confidence: 0.99,
+      reason: `Le code R${code} visible sur l’étiquette correspond au département ${configured.name}.`
+    };
+  }
+
   function captureSuggestion(data) {
+    const codedSuggestion = suggestionFromDepartmentCode(data);
     const name = String(data?.suggestedDepartment || "").trim();
     const confidence = Number(data?.departmentConfidence);
     const reason = String(data?.departmentReason || "").trim();
 
-    suggestion = name && Number.isFinite(confidence) && confidence >= MIN_VISIBLE_CONFIDENCE
-      ? { name, confidence: Math.max(0, Math.min(1, confidence)), reason }
-      : null;
+    suggestion = codedSuggestion || (
+      name && Number.isFinite(confidence) && confidence >= MIN_VISIBLE_CONFIDENCE
+        ? { name, confidence: Math.max(0, Math.min(1, confidence)), reason }
+        : null
+    );
 
     scheduleEnhance(0);
     scheduleEnhance(120);
