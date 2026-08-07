@@ -192,6 +192,21 @@ html[data-theme="dark"] .event-dialog-backdrop,
 html[data-theme="dark"] .dialog-backdrop { background: rgba(0,0,0,.68); }
 html[data-theme="dark"] .appearance-palette-option { background: var(--surface); }
 
+/* Réglages : garder une seule colonne sur téléphone et petite tablette. */
+@media (min-width: 700px) and (max-width: 979px) {
+  #appMain .settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+    width: 100%;
+    max-width: none;
+  }
+  #appMain .settings-grid > * {
+    grid-column: 1 / -1;
+    width: 100%;
+    min-width: 0;
+    max-width: none;
+  }
+}
+
 @media (min-width: 700px) {
   .appearance-palette-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 }
