@@ -69,6 +69,7 @@ html[data-palette="purple"] {
   margin-top: 14px;
 }
 .appearance-palette-option {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -78,14 +79,24 @@ html[data-palette="purple"] {
   border-radius: 12px;
   background: var(--surface);
   cursor: pointer;
+  min-width: 0;
 }
 .appearance-palette-option:has(input:checked) {
   border-color: var(--brand);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 20%, transparent);
 }
+/* Les radios sont accessibles par leur label, mais ne doivent jamais hériter
+   du width:100% global des inputs et agrandir la page hors écran. */
 .appearance-palette-option input {
   position: absolute;
+  width: 1px !important;
+  height: 1px !important;
+  min-width: 0 !important;
+  margin: 0;
+  padding: 0;
   opacity: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
   pointer-events: none;
 }
 .appearance-swatch {
