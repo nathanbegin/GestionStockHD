@@ -1,0 +1,58 @@
+.bottom-nav {
+  width: min(680px, calc(100% - 22px));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+}
+
+.event-list { display: grid; gap: 14px; }
+.event-card { display: grid; grid-template-columns: 72px minmax(0, 1fr); gap: 16px; align-items: start; }
+.event-date-tile { display: grid; place-items: center; padding: 10px 6px; border-radius: 16px; background: var(--surface-2); color: var(--brand-2); }
+.event-date-tile span { font-size: 11px; font-weight: 900; letter-spacing: .08em; }
+.event-date-tile strong { font-size: 30px; line-height: 1.1; }
+.event-card-body { min-width: 0; }
+.event-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 14px; }
+.event-card-head h3 { margin-top: 7px; font-size: 19px; }
+.event-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.event-status, .event-joined { display: inline-flex; padding: 5px 8px; border-radius: 999px; font-size: 11px; font-weight: 850; }
+.event-status.upcoming { background: #fff1d7; color: #805500; }
+.event-status.active { background: #def2e7; color: #176443; }
+.event-status.completed { background: #ece8e5; color: #655952; }
+.event-status.cancelled { background: #fee5e5; color: #8c3232; }
+.event-joined { background: #ffe0cc; color: #8d3500; }
+.event-time { font-weight: 850; white-space: nowrap; }
+.event-date-line, .event-description { margin: 8px 0; color: var(--muted); }
+.event-description { white-space: pre-line; color: var(--text); }
+.event-participants, .event-linked-lists { margin-top: 14px; }
+.event-people, .event-list-chips { display: flex; flex-wrap: wrap; gap: 7px; margin-top: 8px; }
+.event-person { display: inline-flex; padding: 6px 9px; border-radius: 999px; background: #f6f0ec; font-size: 12px; }
+.event-list-chip { display: inline-flex; align-items: center; gap: 7px; border: 1px solid var(--line); border-radius: 12px; background: white; padding: 8px 10px; color: var(--text); font-weight: 750; }
+.event-list-chip small { padding: 2px 5px; border-radius: 999px; background: var(--surface-2); color: var(--brand-2); }
+.event-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 16px; }
+.event-past > summary { font-weight: 850; cursor: pointer; padding: 8px 2px; }
+.event-dialog-backdrop { position: fixed; inset: 0; z-index: 1100; display: grid; place-items: center; padding: 18px; background: rgba(35,28,24,.45); }
+.event-dialog { width: min(760px, 100%); max-height: calc(100vh - 36px); overflow: auto; padding: 20px; border-radius: 22px; background: var(--surface); box-shadow: 0 20px 60px rgba(0,0,0,.28); }
+.event-editor-section { margin-top: 16px; }
+.event-checkbox-grid { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; margin-top: 8px; }
+.event-check { display: flex; flex-direction: row; align-items: center; gap: 9px; margin: 0; padding: 10px; border: 1px solid var(--line); border-radius: 12px; background: #fbf7f4; }
+.event-check input { width: 19px; height: 19px; flex: 0 0 auto; }
+.event-check span { display: grid; gap: 2px; }
+.event-check small { color: var(--muted); font-weight: 500; }
+.event-loading { text-align: center; color: var(--muted); }
+.active-event-dashboard { display: flex; justify-content: space-between; align-items: center; gap: 16px; border-color: rgba(249,99,2,.38); background: #fff9f5; }
+.event-highlight, .event-pickup-target { animation: eventTarget 2.6s ease; }
+@keyframes eventTarget {
+  0%, 100% { box-shadow: 0 3px 12px rgba(92,46,18,.05); }
+  18%, 72% { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(249,99,2,.18), var(--shadow); }
+}
+
+@media (max-width: 700px) {
+  .bottom-nav { width: min(680px, calc(100% - 12px)); gap: 2px; padding: 6px; }
+  .bottom-nav .nav-button small { font-size: 8.5px; }
+  .bottom-nav .nav-button span { font-size: 18px; }
+  .event-card { grid-template-columns: 58px minmax(0,1fr); gap: 11px; padding: 14px; }
+  .event-date-tile strong { font-size: 25px; }
+  .event-card-head { display: block; }
+  .event-time { display: block; margin-top: 8px; }
+  .event-checkbox-grid { grid-template-columns: 1fr; }
+  .active-event-dashboard { align-items: stretch; flex-direction: column; }
+  .active-event-dashboard .button { width: 100%; }
+}
