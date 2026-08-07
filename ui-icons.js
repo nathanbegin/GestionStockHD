@@ -4,6 +4,14 @@
       <svg class="ui-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <path d="M8.5 5 10 3h4l1.5 2H19a3 3 0 0 1 3 3v9a3 3 0 0 1-3 3H5a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3h3.5ZM12 9a4 4 0 1 0 0 8 4 4 0 0 0 0-8Zm0 2a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z"/>
       </svg>`,
+    calendar: `
+      <svg class="ui-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3.5" y="5" width="17" height="15.5" rx="2.5"/>
+          <path d="M7.5 3.5V7M16.5 3.5V7M3.5 9.5h17"/>
+          <path d="M7.5 13h2M12 13h2M16.5 13h.5M7.5 16.5h2M12 16.5h2"/>
+        </g>
+      </svg>`,
     pickupHand: `
       <svg class="ui-icon-svg" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
         <g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
@@ -29,6 +37,7 @@
 
   function updateStaticNavigation() {
     setIcon(document.querySelector('[data-nav="scan"] > span'), "camera");
+    setIcon(document.querySelector("#eventsNavButton > span"), "calendar");
     setIcon(document.querySelector('[data-nav="pickups"] > span'), "pickupHand");
     setIcon(document.querySelector("#logoutButton"), "logout");
   }
@@ -89,7 +98,7 @@
         height: 1.5rem;
       }
     `;
-    document.head.append(style);
+    document.head.appendChild(style);
   }
 
   document.addEventListener("DOMContentLoaded", () => {
