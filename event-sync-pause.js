@@ -115,6 +115,14 @@
     return response;
   };
 
+  function keepEventEditorOutOfMainFormState(event) {
+    if (!event.target.closest?.("#eventEditorForm")) return;
+    event.stopPropagation();
+  }
+
+  document.addEventListener("input", keepEventEditorOutOfMainFormState, true);
+  document.addEventListener("change", keepEventEditorOutOfMainFormState, true);
+
   document.addEventListener("click", event => {
     const action = event.target.closest("[data-event-action]");
     const actionName = action?.dataset.eventAction || "";
