@@ -1,12 +1,28 @@
 .desktop-menu-toggle { display: none; }
 
-/* Mobile/tablette : la navigation contient maintenant 6 onglets réels.
-   Ne jamais laisser l'ancienne grille 7 x 62 px élargir le viewport. */
+/* Mobile/tablette : 6 onglets, centrage explicite et aucun débordement horizontal. */
 @media (max-width: 979px) {
-  #primaryNavigation.bottom-nav {
-    width: calc(100vw - 14px);
-    max-width: calc(100vw - 14px);
+  html,
+  body {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: clip;
+  }
+
+  .app-shell,
+  .topbar,
+  .main-content {
     min-width: 0;
+    max-width: 100%;
+  }
+
+  #primaryNavigation.bottom-nav {
+    left: 7px;
+    right: 7px;
+    width: auto;
+    max-width: none;
+    min-width: 0;
+    transform: none;
     grid-template-columns: repeat(6, minmax(0, 1fr));
     overflow-x: hidden;
   }
