@@ -192,18 +192,38 @@ html[data-theme="dark"] .event-dialog-backdrop,
 html[data-theme="dark"] .dialog-backdrop { background: rgba(0,0,0,.68); }
 html[data-theme="dark"] .appearance-palette-option { background: var(--surface); }
 
-/* Réglages : garder une seule colonne sur téléphone et petite tablette. */
-@media (min-width: 700px) and (max-width: 979px) {
-  #appMain .settings-grid {
-    grid-template-columns: minmax(0, 1fr);
-    width: 100%;
-    max-width: none;
+/* La vue Réglages doit utiliser toute la largeur disponible sur mobile/tablette. */
+html.settings-view #appShell,
+html.settings-view .topbar,
+html.settings-view #appMain,
+html.settings-view #appMain > .section,
+html.settings-view #appMain .settings-grid {
+  width: 100% !important;
+  max-width: none !important;
+  min-width: 0 !important;
+  box-sizing: border-box;
+}
+
+@media (max-width: 979px) {
+  html.settings-view #appMain .settings-grid {
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr) !important;
   }
-  #appMain .settings-grid > * {
+
+  html.settings-view #appMain .settings-grid > * {
+    grid-column: 1 / -1 !important;
+    width: 100% !important;
+    max-width: none !important;
+    min-width: 0 !important;
+  }
+}
+
+@media (min-width: 980px) {
+  html.settings-view #appMain .settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  html.settings-view #appearanceSettingsCard {
     grid-column: 1 / -1;
-    width: 100%;
-    min-width: 0;
-    max-width: none;
   }
 }
 
