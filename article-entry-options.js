@@ -1,5 +1,8 @@
 (() => {
   const ENTRY_MODE_KEY = "restock_item_entry_mode_v1";
+  const AUTO_ANALYZE_DELAY = 450;
+  let autoAnalyzePending = false;
+  let autoAnalyzeTimer = null;
 
   function entryMode() {
     return localStorage.getItem(ENTRY_MODE_KEY) === "form" ? "form" : "guided";
@@ -92,7 +95,7 @@
           <span class="article-entry-tile-icon">${photoIcon()}</span>
           <span>
             <h3>Ajouter par photo</h3>
-            <p>Prendre ou choisir une photo d’étiquette, puis extraire le SKU, le produit et le département avec l’IA.</p>
+            <p>Ouvrir directement la caméra, photographier l’étiquette et lancer automatiquement l’analyse par l’IA.</p>
           </span>
           <span class="article-entry-arrow" aria-hidden="true">›</span>
         </button>
@@ -130,6 +133,29 @@
     });
   }
 
+  function openCamera() {
+    const input = document.querySelector("#cameraInput");
+    if (!input) return false;
+    input.value = "";
+    input.click();
+    return true;
+  }
+
+  function triggerAutomaticAnalysis() {
+    if (!autoAnalyzePending) return;
+    const button = document.querySelector('#appMain [data-action="analyze-photo"]');
+    if (!button || button.disabled) return;
+    autoAnalyzePending = false;
+    clearTimeout(autoAnalyzeTimer);
+    button.click();
+  }
+
+  function scheduleAutomaticAnalysis(delay = AUTO_ANALYZE_DELAY) {
+    if (!autoAnalyzePending) return;
+    clearTimeout(autoAnalyzeTimer);
+    autoAnalyzeTimer = window.setTimeout(triggerAutomaticAnalysis, delay);
+  }
+
   function enhanceArticlesView() {
     const main = document.querySelector("#appMain");
     if (!main) return;
@@ -139,7 +165,32 @@
       main.prepend(createOptionsSection());
     }
     updateNavigationState();
+    scheduleAutomaticAnalysis();
   }
+
+  document.addEventListener("click", event => {
+    const tile = event.target.closest('[data-view="scan"]');
+    if (!tile?.closest("[data-article-entry-options]")) return;
+
+    // Le gestionnaire principal ouvre la vue photo avant que l’événement atteigne
+    // document. Le clic sur le champ fichier reste donc dans le même geste utilisateur.
+    if (!openCamera()) {
+      window.requestAnimationFrame(openCamera);
+    }
+  });
+
+  document.addEventListener("change", event => {
+    const input = event.target;
+    if (!input.matches?.("#cameraInput, #galleryInput") || !input.files?.[0]) return;
+    autoAnalyzePending = true;
+    scheduleAutomaticAnalysis();
+  }, true);
+
+  document.addEventListener("click", event => {
+    if (!event.target.closest('[data-action="clear-photo"]')) return;
+    autoAnalyzePending = false;
+    clearTimeout(autoAnalyzeTimer);
+  }, true);
 
   document.addEventListener("DOMContentLoaded", () => {
     installStyles();
