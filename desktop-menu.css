@@ -1,0 +1,89 @@
+.desktop-menu-toggle { display: none; }
+
+@media (min-width: 980px) {
+  .app-shell {
+    padding-left: 0;
+    padding-bottom: 30px;
+  }
+
+  .desktop-menu-toggle {
+    position: fixed;
+    z-index: 120;
+    top: 16px;
+    left: 18px;
+    display: grid;
+    place-content: center;
+    gap: 4px;
+    width: 44px;
+    height: 44px;
+    padding: 0;
+    border: 1px solid var(--line);
+    border-radius: 13px;
+    background: var(--surface);
+    color: var(--text);
+    box-shadow: 0 4px 16px rgba(43,33,28,.10);
+  }
+
+  .desktop-menu-toggle span {
+    display: block;
+    width: 20px;
+    height: 2px;
+    border-radius: 999px;
+    background: currentColor;
+    transition: transform .18s ease, opacity .18s ease;
+  }
+
+  .desktop-menu-toggle.open span:nth-child(1) { transform: translateY(6px) rotate(45deg); }
+  .desktop-menu-toggle.open span:nth-child(2) { opacity: 0; }
+  .desktop-menu-toggle.open span:nth-child(3) { transform: translateY(-6px) rotate(-45deg); }
+
+  .topbar {
+    padding-left: 78px;
+  }
+
+  .main-content {
+    padding: 28px;
+  }
+
+  #primaryNavigation.bottom-nav {
+    left: 18px;
+    top: 70px;
+    bottom: auto;
+    width: 282px;
+    max-height: calc(100vh - 88px);
+    overflow-y: auto;
+    transform: translateY(-8px) scale(.98);
+    grid-template-columns: 1fr;
+    grid-template-rows: none;
+    align-content: start;
+    gap: 4px;
+    padding: 8px;
+    border-radius: 18px;
+    opacity: 0;
+    visibility: hidden;
+    pointer-events: none;
+    box-shadow: 0 18px 45px rgba(0,0,0,.24);
+    transition: opacity .16s ease, transform .16s ease, visibility .16s ease;
+  }
+
+  #primaryNavigation.bottom-nav.desktop-open {
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: translateY(0) scale(1);
+  }
+
+  #primaryNavigation .nav-button {
+    grid-template-columns: 34px minmax(0,1fr);
+    justify-items: start;
+    width: 100%;
+    min-height: 52px;
+    padding: 0 14px;
+    text-align: left;
+  }
+
+  #primaryNavigation .nav-button small {
+    font-size: 13px;
+    white-space: normal;
+  }
+}
