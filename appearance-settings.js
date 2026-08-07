@@ -32,13 +32,21 @@
     if (meta) meta.setAttribute("content", BRAND_COLORS[settings.palette] || BRAND_COLORS.orange);
   }
 
+  function isSettingsView() {
+    return document.querySelector("#pageTitle")?.textContent?.trim() === "Réglages";
+  }
+
+  function syncSettingsViewClass() {
+    document.documentElement.classList.toggle("settings-view", isSettingsView());
+  }
+
   function paletteOption(value, label, selected) {
     return `<label class="appearance-palette-option"><input type="radio" name="appPalette" value="${value}" ${selected === value ? "checked" : ""}><span class="appearance-swatch ${value}" aria-hidden="true"></span><strong>${label}</strong></label>`;
   }
 
   function ensureSettingsCard() {
-    const title = document.querySelector("#pageTitle")?.textContent?.trim();
-    if (title !== "Réglages") return;
+    syncSettingsViewClass();
+    if (!isSettingsView()) return;
     const grid = document.querySelector("#appMain .settings-grid");
     if (!grid || grid.querySelector("#appearanceSettingsCard")) return;
 
@@ -85,7 +93,11 @@
   applySettings();
   document.addEventListener("DOMContentLoaded", () => {
     applySettings();
+    syncSettingsViewClass();
     ensureSettingsCard();
-    window.setInterval(ensureSettingsCard, 350);
+    window.setInterval(() => {
+      syncSettingsViewClass();
+      ensureSettingsCard();
+    }, 250);
   });
 })();
