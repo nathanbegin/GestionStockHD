@@ -11,11 +11,19 @@ import {
   removePushSubscription,
   savePushSubscription
 } from "../lib/web-push.js";
+import {
+  createEvent,
+  deleteEvent,
+  joinEvent,
+  leaveEvent,
+  listEvents,
+  updateEvent
+} from "../lib/events.js";
 
 export default async function handler(request, response) {
   try {
     const view = String(request.query?.view || "");
-    const protectedRequest = ["notifications", "push-config"].includes(view) || request.method === "POST";
+    const protectedRequest = ["notifications", "push-config", "events"].includes(view) || request.method === "POST";
     const { supabase, profile, user } = await getAuthContext(request, {
       allowPending: !protectedRequest
     });
@@ -29,15 +37,17 @@ export default async function handler(request, response) {
       return json(response, 200, await getWebPushClientConfig(supabase, user.id));
     }
 
+    if (request.method === "GET" && view === "events") {
+      return json(response, 200, await listEvents(supabase, profile, user));
+    }
+
     if (request.method === "POST") {
       const action = String(request.body?.action || "");
       if (action === "notificationRead") {
-        const result = await markNotificationRead(supabase, user.id, request.body?.notificationId);
-        return json(response, 200, result);
+        return json(response, 200, await markNotificationRead(supabase, user.id, request.body?.notificationId));
       }
       if (action === "notificationReadAll") {
-        const result = await markAllNotificationsRead(supabase, user.id);
-        return json(response, 200, result);
+        return json(response, 200, await markAllNotificationsRead(supabase, user.id));
       }
       if (action === "pushSubscribe") {
         const result = await savePushSubscription(
@@ -49,14 +59,27 @@ export default async function handler(request, response) {
         return json(response, 200, result);
       }
       if (action === "pushUnsubscribe") {
-        const result = await removePushSubscription(supabase, user.id, request.body?.endpoint);
-        return json(response, 200, result);
+        return json(response, 200, await removePushSubscription(supabase, user.id, request.body?.endpoint));
       }
       if (action === "pushUnsubscribeAll") {
-        const result = await removeAllPushSubscriptions(supabase, user.id);
-        return json(response, 200, result);
+        return json(response, 200, await removeAllPushSubscriptions(supabase, user.id));
       }
-      return json(response, 400, { error: "Action de notification inconnue" });
+      if (action === "eventCreate") {
+        return json(response, 200, await createEvent(supabase, profile, user, request.body?.event));
+      }
+      if (action === "eventUpdate") {
+        return json(response, 200, await updateEvent(supabase, profile, user, request.body?.eventId, request.body?.event));
+      }
+      if (action === "eventDelete") {
+        return json(response, 200, await deleteEvent(supabase, profile, user, request.body?.eventId));
+      }
+      if (action === "eventJoin") {
+        return json(response, 200, await joinEvent(supabase, profile, user, request.body?.eventId));
+      }
+      if (action === "eventLeave") {
+        return json(response, 200, await leaveEvent(supabase, profile, user, request.body?.eventId));
+      }
+      return json(response, 400, { error: "Action inconnue" });
     }
 
     if (request.method !== "GET") return json(response, 405, { error: "Méthode non permise" });
@@ -70,7 +93,10 @@ export default async function handler(request, response) {
       bootstrapAvailable: Number(count || 0) === 0 && Boolean(process.env.APP_PIN)
     });
   } catch (error) {
-    if (error?.status === 400) return json(response, 400, { error: error.message });
-    return sendError(response, error, "Impossible de charger le profil ou les notifications");
+    const status = Number(error?.status || 0);
+    if ([400, 403, 404, 409].includes(status)) {
+      return json(response, status, { error: error.message });
+    }
+    return sendError(response, error, "Impossible de charger le profil, les notifications ou les événements");
   }
 }
