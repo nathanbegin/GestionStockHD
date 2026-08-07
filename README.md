@@ -1,47 +1,91 @@
 # Remplissage magasin V5
 
-Application web mobile/PWA pour relever, attribuer et traiter des articles à remplir en magasin.
+Application web mobile/PWA de gestion du remplissage en magasin. Elle permet de relever les articles à remplir, les attribuer aux employés, préparer des listes de ramassage, suivre leur progression et coordonner le travail d’équipe.
 
-## Nouveautés de la version 5
+## Fonctionnalités principales
 
-- Connexion par courriel et mot de passe avec Supabase Auth.
-- Page d’inscription publique.
-- Demandes d’accès en attente jusqu’à l’approbation d’un superviseur ou d’un administrateur.
-- Rôles : employé, superviseur et administrateur, avec restrictions appliquées dans l’interface et lors de la synchronisation serveur.
-- Bouton de déconnexion visible dans l’interface, y compris dans la PWA mobile.
-- Onglet Attribution des articles.
-- Listes de ramassage personnalisées.
-- Attribution d’une liste de ramassage à un ou plusieurs employés.
-- Vérification du permis de chariot élévateur.
-- Historique des ajouts, modifications, attributions, récupérations et remplissages.
-- Rapports PDF des listes de ramassage, incluant le lieu du ramassage et la destination en tablette.
-- Synchronisation automatique et mise à jour en direct des appareils connectés.
+### Articles et relevés
+
+- Ajout manuel d’articles ou analyse d’une photo d’étiquette.
+- Extraction du numéro d’article (SKU) et des informations utiles à partir d’une photo.
+- Classement par liste source et département.
+- Priorités : élevée, normale ou faible.
+- Statuts : À remplir, Récupéré, Rempli et Introuvable.
+- Recherche et filtres par liste, département, statut, priorité et employé.
+- Modification en lot de plusieurs articles.
 - Photo privée de l’emplacement d’entreposage.
 
-## Rôles
+### Attribution et ramassage
+
+- Attribution d’articles à un ou plusieurs employés.
+- Listes de ramassage personnalisées.
+- Création d’une liste directement à partir d’une sélection d’articles.
+- Attribution d’une liste de ramassage à un ou plusieurs employés.
+- Lieu de ramassage et destination en tablette pour chaque article.
+- Tournée de ramassage adaptée à l’utilisation mobile.
+- Vérification du permis de chariot élévateur lorsqu’un article le requiert.
+- Rapports PDF organisés pour faciliter le travail sur le plancher.
+
+### Événements
+
+- Onglet **Événements** avec événements à venir et passés.
+- Création et gestion d’événements par les rôles autorisés.
+- Date, heure, lieu, description et participants.
+- Association d’une ou plusieurs listes de ramassage à un événement.
+- Inscription et désinscription des employés.
+- Affichage de la progression des listes liées.
+- Gestion des événements annulés.
+- Notifications liées aux inscriptions et aux changements d’événements.
+
+### Collaboration et suivi
+
+- Synchronisation automatique avec Supabase.
+- Mise à jour en direct des appareils connectés.
+- Historique des ajouts, modifications, attributions, récupérations et remplissages.
+- Gestion centralisée des listes, départements, employés et paramètres du magasin.
+- Interface responsive optimisée pour téléphone, tablette et ordinateur.
+- PWA installable avec fonctionnement local lorsque la connexion est temporairement indisponible.
+- Navigation mobile et menu hamburger sur ordinateur.
+
+### Apparence
+
+Dans **Réglages → Apparence**, chaque appareil peut utiliser :
+
+- les palettes Orange, Bleu, Vert ou Violet;
+- le mode clair ou le mode nuit.
+
+Les préférences d’apparence sont enregistrées localement sur l’appareil.
+
+## Comptes et rôles
+
+L’authentification utilise **Supabase Auth** avec courriel et mot de passe. Une nouvelle inscription reste en attente jusqu’à son approbation.
 
 ### Employé
 
 - ajouter et modifier des articles;
 - mettre à jour les statuts;
-- consulter les attributions;
+- consulter ses attributions;
 - créer ses propres listes de ramassage;
-- effectuer une tournée et exporter son rapport PDF;
-- consulter l’historique.
+- effectuer une tournée et exporter un rapport PDF;
+- consulter l’historique;
+- consulter les événements et s’y inscrire.
 
 ### Superviseur
 
-- toutes les fonctions d’un employé;
+Toutes les fonctions d’un employé, plus :
+
 - attribuer des articles;
 - approuver ou refuser les nouvelles demandes d’accès;
-- modifier les permis de lift;
-- gérer les listes source et les départements.
+- modifier les permis de chariot élévateur;
+- gérer les listes source et les départements;
+- gérer les fonctions de coordination réservées aux rôles supérieurs.
 
-Un superviseur approuve les nouvelles demandes comme employés. Seul un administrateur peut octroyer le rôle superviseur ou administrateur.
+Un superviseur approuve les nouvelles demandes comme employés. Seul un administrateur peut octroyer le rôle de superviseur ou d’administrateur.
 
 ### Administrateur
 
-- toutes les fonctions du superviseur;
+Toutes les fonctions du superviseur, plus :
+
 - modifier les rôles;
 - modifier l’état des comptes;
 - modifier les réglages généraux du magasin.
@@ -52,11 +96,11 @@ Les données d’articles, listes, départements, employés, photos et statuts e
 
 La V5 remplace la connexion par nom et PIN par Supabase Auth. Les utilisateurs doivent donc créer un compte avec leur courriel.
 
-### 1. Remplacer les fichiers du dépôt
+### 1. Mettre à jour les fichiers
 
-Copiez le contenu de cette version dans votre dépôt Git relié à Vercel.
+Déployez le contenu actuel de ce dépôt dans le projet Vercel relié à l’application.
 
-### 2. Exécuter le nouveau schéma SQL
+### 2. Exécuter le schéma SQL
 
 Dans Supabase :
 
@@ -65,28 +109,30 @@ Dans Supabase :
 3. copiez le contenu de `supabase/schema.sql`;
 4. exécutez la requête.
 
-Le script :
+Le script principal :
 
 - conserve la table `app_state` existante;
-- crée la table `profiles`;
+- crée et maintient la table `profiles`;
 - crée automatiquement un profil en attente lors d’une inscription Supabase Auth;
 - crée les profils manquants pour les comptes Auth déjà existants;
 - conserve ou crée le bucket privé des photos d’emplacement.
 
+Si le dépôt contient des migrations SQL additionnelles correspondant à des fonctions ajoutées après le schéma principal, exécutez-les également dans Supabase avant le redéploiement.
+
 ### 3. Configurer Supabase Auth
 
-Dans Supabase, vérifiez que la connexion par courriel et mot de passe est activée.
+Vérifiez que la connexion par courriel et mot de passe est activée.
 
 Configurez aussi :
 
 - l’URL du site avec votre domaine Vercel;
-- les URL de redirection autorisées pour votre domaine de production et vos domaines Preview, si utilisés.
+- les URL de redirection autorisées pour le domaine de production et les domaines Preview utilisés.
 
-La confirmation de courriel peut rester activée. Dans ce cas, l’utilisateur doit d’abord confirmer son courriel, puis se connecter; son compte demeure ensuite en attente d’approbation dans l’application.
+La confirmation de courriel peut rester activée. Dans ce cas, l’utilisateur confirme d’abord son courriel, puis se connecte; son compte demeure en attente d’approbation dans l’application.
 
 ### 4. Variables Vercel
 
-Ajoutez ou conservez :
+Variables principales :
 
 ```text
 SUPABASE_URL=https://VOTRE-PROJET.supabase.co
@@ -96,7 +142,7 @@ OPENAI_API_KEY=...
 OPENAI_VISION_MODEL=gpt-5-nano
 ```
 
-Pour le premier administrateur, utilisez l’une de ces méthodes.
+Pour le premier administrateur, utilisez l’une des méthodes suivantes.
 
 #### Méthode recommandée
 
@@ -112,71 +158,55 @@ Le compte inscrit avec ce courriel est automatiquement approuvé comme administr
 APP_PIN=un-long-code-d-installation
 ```
 
-Lorsque aucun administrateur n’existe, le premier utilisateur connecté en attente verra un formulaire permettant d’entrer ce code. Dès qu’un administrateur existe, cette promotion initiale est bloquée.
+Lorsqu’aucun administrateur n’existe, le premier utilisateur connecté en attente peut entrer ce code. Dès qu’un administrateur existe, cette promotion initiale est bloquée.
 
 ### 5. Redéployer
 
-Après les changements de variables, redéployez l’application dans Vercel.
+Après une modification de schéma ou de variables, redéployez l’application dans Vercel.
 
-Fermez complètement l’ancienne PWA, puis rouvrez-la. Si l’ancienne interface reste en cache, retirez et réinstallez la PWA ou videz les données du site. Le nouveau cache s’appelle `remplissage-v5`.
+Si une ancienne interface demeure en cache, fermez complètement la PWA puis rouvrez-la. Au besoin, retirez et réinstallez la PWA ou videz les données du site.
 
 ## Approbation des utilisateurs
 
 1. L’utilisateur ouvre la page d’inscription.
 2. Il entre son nom, son courriel et son mot de passe.
-3. Le profil est créé avec l’état `pending`.
-4. Après connexion, une page lui indique que sa demande est en attente.
-5. Un superviseur ou un administrateur ouvre **Plus → Utilisateurs**.
+3. Son profil est créé avec l’état `pending`.
+4. Après connexion, l’application indique que la demande est en attente.
+5. Un superviseur ou administrateur ouvre **Plus → Utilisateurs**.
 6. Il approuve ou refuse la demande.
-7. L’utilisateur clique sur **Vérifier l’approbation** ou se reconnecte.
-
-## Listes de ramassage personnalisées
-
-Une liste peut être créée :
-
-- depuis l’onglet **Ramassages**;
-- en sélectionnant plusieurs articles dans **Articles**, puis en cliquant sur **Créer un ramassage**.
-
-La liste contient :
-
-- un nom;
-- un point de départ ou une zone;
-- les articles inclus;
-- les employés responsables;
-- les lieux individuels de ramassage;
-- les destinations en tablette.
-
-Le bouton **PDF** produit un rapport téléchargeable avec ces informations.
+7. L’utilisateur vérifie l’approbation ou se reconnecte.
 
 ## Architecture
 
-- Interface statique/PWA : `index.html`, `app.js`, `styles.css`.
+- Interface PWA : HTML, CSS et JavaScript côté client.
 - Authentification : Supabase Auth.
 - Profils et rôles : `public.profiles`.
-- État collaboratif : `public.app_state`.
-- Photos : bucket privé `stock-location-photos`.
-- Fonctions Vercel :
-  - `api/client-config.js`;
-  - `api/me.js`;
-  - `api/bootstrap-admin.js`;
-  - `api/users.js`;
-  - `api/sync.js`;
-  - `api/report-pdf.js`;
-  - fonctions d’analyse et de photos.
+- État collaboratif principal : `public.app_state`.
+- Photos privées : bucket `stock-location-photos`.
+- API serveur : fonctions Vercel dans `api/`.
+- Module Événements : interface dédiée et logique serveur reliée aux comptes Supabase.
+- Analyse d’étiquettes : API OpenAI appelée côté serveur.
+- Rapports : génération PDF côté serveur.
 
-Les clés secrètes Supabase et OpenAI ne sont jamais envoyées au navigateur. Les fonctions Vercel valident le jeton Supabase Auth avant d’accéder aux données. La synchronisation empêche notamment un employé de modifier les affectations, la structure du magasin ou les réglages réservés aux rôles supérieurs.
+Les clés secrètes Supabase et OpenAI ne sont jamais envoyées au navigateur. Les fonctions Vercel valident le jeton Supabase Auth avant d’accéder aux données et appliquent les restrictions selon le rôle.
 
 ## Développement local
+
+Prérequis : **Node.js 20 ou plus récent**.
 
 ```bash
 npm install
 vercel dev
 ```
 
-Créez un fichier `.env.local` à partir de `.env.example`.
+Créez un fichier `.env.local` à partir de `.env.example` et renseignez les variables nécessaires.
 
 ## Limites actuelles
 
 - L’état opérationnel principal demeure un document JSON partagé dans `app_state`; cette architecture convient à un MVP ou à un magasin de taille modérée.
-- En cas de très grand volume ou de nombreuses modifications simultanées, une migration vers des tables relationnelles distinctes pour les articles, listes et historiques serait recommandée.
+- Pour un très grand volume ou de nombreuses modifications simultanées, une migration vers des tables relationnelles distinctes pour les articles, listes et historiques serait recommandée.
 - Les permis enregistrés constituent une vérification administrative interne et ne remplacent pas les exigences de formation, d’autorisation et de sécurité de l’employeur.
+
+---
+
+Projet : [nathanbegin/GestionStockHD](https://github.com/nathanbegin/GestionStockHD)
