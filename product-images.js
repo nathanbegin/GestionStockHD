@@ -80,7 +80,8 @@ async function openProductImage(card) {
   const loading = modal.querySelector(".product-image-loading");
   const error = modal.querySelector(".product-image-error");
 
-  modal.dataset.sku = sku;\n  modal.querySelector("#productImageTitle").textContent = title;
+  modal.dataset.sku = sku;
+  modal.querySelector("#productImageTitle").textContent = title;
   modal.querySelector(".product-image-sku").textContent = card.querySelector(".sku")?.textContent?.trim() || sku;
   img.hidden = true;
   img.removeAttribute("src");
