@@ -501,6 +501,7 @@ function render() {
     settings: "Réglages"
   };
   els.pageTitle.textContent = titles[currentView] || "Remplissage";
+  els.appShell.classList.toggle("tour-mode", currentView === "tour");
   const renderer = {
     dashboard: renderDashboard,
     scan: renderScan,
