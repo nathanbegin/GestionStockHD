@@ -283,3 +283,155 @@
     min-width: 3.8rem;
   }
 }
+
+/* Mobile : le mode guidé reste utilisable sans faire défiler toute la page. */
+@media (max-width: 699px) {
+  html:has(.article-wizard),
+  body:has(.article-wizard) {
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .app-shell:has(.article-wizard) {
+    height: 100dvh;
+    min-height: 100dvh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    padding-bottom: 0;
+  }
+
+  .app-shell:has(.article-wizard) .topbar {
+    position: relative;
+    flex: 0 0 auto;
+    align-items: center;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+
+  .app-shell:has(.article-wizard) .topbar > div:first-child .eyebrow {
+    display: none;
+  }
+
+  .app-shell:has(.article-wizard) .topbar h1 {
+    font-size: 21px;
+    line-height: 1.05;
+  }
+
+  .app-shell:has(.article-wizard) .app-back-button {
+    margin-bottom: 1px;
+    padding: 0;
+    font-size: 12px;
+    line-height: 1.1;
+  }
+
+  .app-shell:has(.article-wizard) .main-content {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+    padding: 7px 10px calc(80px + env(safe-area-inset-bottom));
+  }
+
+  .app-shell:has(.article-wizard) .main-content > .section {
+    height: 100%;
+    min-height: 0;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .app-shell:has(.article-wizard) .main-content > .section > .section-head {
+    display: none;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard {
+    flex: 1 1 auto;
+    min-height: 0;
+    margin: 0;
+    padding: 12px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    border-radius: 16px;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-header {
+    flex: 0 0 auto;
+    margin: 0 0 8px;
+    padding: 0 0 8px;
+    scroll-margin-top: 0;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-heading {
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 5px;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-badge {
+    min-height: 24px;
+    padding: 2px 8px;
+    font-size: 11px;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-count {
+    margin-left: auto;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-question {
+    margin-bottom: 6px;
+    font-size: 19px;
+    line-height: 1.12;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-progress {
+    height: 5px;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard .form-grid {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: hidden;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-step {
+    height: 100%;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    padding: 0 2px 4px;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-controls {
+    flex: 0 0 auto;
+    position: static;
+    width: 100%;
+    margin: 8px 0 0;
+    padding: 8px 0 0;
+    border-top: 1px solid rgba(0, 0, 0, .08);
+    background: var(--surface, #fff);
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard-controls .button {
+    min-height: 46px;
+    padding: 9px 10px;
+  }
+
+  .app-shell:has(.article-wizard) .article-wizard.article-wizard-keyboard-open {
+    padding-bottom: 12px !important;
+    scroll-padding-bottom: 0 !important;
+  }
+
+  .app-shell:has(.article-wizard) .location-primary-fields {
+    gap: 8px;
+  }
+
+  .app-shell:has(.article-wizard) .location-ges-summary-card {
+    margin-top: 9px;
+    padding: 9px 10px;
+  }
+}
