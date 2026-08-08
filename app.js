@@ -582,6 +582,10 @@ function renderStockPhotoField(item = {}) {
     <button id="removeStockPhotoButton" class="button compact danger" type="button" data-action="remove-stock-photo" ${hasPreview ? "" : "hidden"}>Retirer la photo</button>
   </div>`;
 }
+function locationBarcodeField(name, label, value, placeholder) {
+  const inputId = `${name}BarcodeInput`;
+  return `<div class="location-barcode-field"><label>${escapeHTML(label)}<input name="${escapeHTML(name)}" maxlength="120" value="${escapeHTML(value)}" placeholder="${escapeHTML(placeholder)}"></label><div class="button-row top-gap"><label class="button compact" for="${inputId}">▣ Scanner le code-barres</label></div><input id="${inputId}" class="location-barcode-input" type="file" accept="image/*" capture="environment" data-location-target="${escapeHTML(name)}" hidden><span class="field-hint">Le code détecté sera inscrit automatiquement dans ce champ.</span></div>`;
+}
 function commonItemFields(item = {}) {
   const listId = item.listId || state.lists[0]?.id || "";
   const departmentId = item.departmentId || state.departments[0]?.id || "";
@@ -592,8 +596,8 @@ function commonItemFields(item = {}) {
     <label>Département<select name="departmentId" required>${options(state.departments, departmentId)}</select></label>
     <label>Quantité à remplir<input name="quantity" type="number" inputmode="numeric" min="1" max="999" required value="${Number(item.quantity) || 1}"></label>
     <label>Priorité<select name="priority"><option value="high" ${item.priority === "high" ? "selected" : ""}>Élevée</option><option value="medium" ${!item.priority || item.priority === "medium" ? "selected" : ""}>Normale</option><option value="low" ${item.priority === "low" ? "selected" : ""}>Faible</option></select></label>
-    <label>Emplacement en tablette<input name="salesLocation" maxlength="120" value="${escapeHTML(item.salesLocation || "")}" placeholder="Allée 12, section B, tablette 3"></label>
-    <label>Lieu du ramassage<input name="stockLocation" maxlength="120" value="${escapeHTML(item.stockLocation || "")}" placeholder="Entrepôt R4, niveau 2 ou cour zone B"></label>
+    ${locationBarcodeField("salesLocation", "Emplacement en tablette", item.salesLocation || "", "Allée 12, section B, tablette 3")}
+    ${locationBarcodeField("stockLocation", "Lieu du ramassage", item.stockLocation || "", "Entrepôt R4, niveau 2 ou cour zone B")}
     ${canManageAssignments()
       ? `<div class="full assignment-field"><div class="field-title">Employé(s) assigné(s)</div>${renderEmployeePicker(item.assignedEmployeeIds || [])}</div>`
       : `<div class="full assignment-field readonly-assignment"><div class="field-title">Employé(s) assigné(s)</div><p class="small muted">${escapeHTML(assignedEmployees(item).map(x => x.name).join(", ") || "Aucune attribution")}</p>${(item.assignedEmployeeIds || []).map(id => `<input type="hidden" name="assignedEmployeeIds" value="${escapeHTML(id)}">`).join("")}<span class="field-hint">L’attribution est gérée par un superviseur ou un administrateur.</span></div>`}
@@ -1106,6 +1110,26 @@ async function handleLabelPhoto(file) {
     }
   } catch { toast("Impossible de lire cette photo"); }
 }
+async function handleLocationBarcode(file, fieldName) {
+  if (!file?.type?.startsWith("image/")) return toast("Choisis une image valide");
+  const field = els.appMain.querySelector(`[name="${fieldName}"]`);
+  if (!field) return toast("Champ d’emplacement introuvable");
+  if (!("BarcodeDetector" in window)) return toast("Le scan de code-barres n’est pas pris en charge par ce navigateur");
+  try {
+    const detector = new BarcodeDetector({ formats: ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "codabar", "itf", "qr_code", "data_matrix"] });
+    const bitmap = await createImageBitmap(file);
+    const codes = await detector.detect(bitmap);
+    bitmap.close?.();
+    const rawValue = String(codes[0]?.rawValue || "").trim();
+    if (!rawValue) return toast("Aucun code-barres détecté — essaie de rapprocher la caméra");
+    field.value = rawValue.slice(0, 120);
+    field.dispatchEvent(new Event("input", { bubbles: true }));
+    formDirty = true;
+    toast(`Emplacement détecté : ${field.value}`);
+  } catch {
+    toast("Impossible de lire ce code-barres");
+  }
+}
 async function handleStockPhoto(file) {
   if (!file?.type?.startsWith("image/")) return toast("Choisis une image valide");
   try {
@@ -1472,6 +1496,10 @@ els.appMain.addEventListener("change", async event => {
   const target = event.target;
   if (["cameraInput", "galleryInput"].includes(target.id) && target.files?.[0]) await handleLabelPhoto(target.files[0]);
   if (["stockCameraInput", "stockGalleryInput"].includes(target.id) && target.files?.[0]) await handleStockPhoto(target.files[0]);
+  if (target.classList.contains("location-barcode-input") && target.files?.[0]) {
+    await handleLocationBarcode(target.files[0], target.dataset.locationTarget);
+    target.value = "";
+  }
   if (target.matches('[name="sku"]')) {
     target.setCustomValidity("");
     const normalized = normalizeRequiredSku(target.value);
