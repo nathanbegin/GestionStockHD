@@ -81,7 +81,9 @@
     const stockInput = form.querySelector('input[name="stockLocation"]');
     const salesPanel = salesInput?.closest(".location-barcode-field");
     const stockPanel = stockInput?.closest(".location-barcode-field");
-    const gesFields = grid ? [...grid.querySelectorAll(":scope > .ges-location-field")] : [];
+    // Les champs GES sont injectés à l'intérieur du panneau de ramassage,
+    // pas comme enfants directs de .form-grid. On les cherche donc dans tout le formulaire.
+    const gesFields = [...form.querySelectorAll(".ges-location-field")];
     if (!grid || !salesPanel || !stockPanel || gesFields.length < 2) return;
 
     const wrapper = document.createElement("div");
