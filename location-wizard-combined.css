@@ -1,0 +1,184 @@
+.location-wizard-combined {
+  min-width: 0;
+}
+
+.location-combined-step-title {
+  display: none;
+}
+
+.location-primary-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.location-wizard-combined .location-barcode-field {
+  min-width: 0;
+}
+
+.location-wizard-combined .location-barcode-field > label {
+  margin-top: 0;
+}
+
+.location-wizard-combined .location-primary-fields > .location-barcode-field > .field-hint {
+  display: none;
+}
+
+.location-ges-summary-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #fbf7f4;
+}
+
+.location-ges-summary-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.location-ges-summary-text strong {
+  font-size: 13px;
+}
+
+.location-ges-summary-text span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.location-ges-manage {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  flex: 0 0 auto;
+  margin: 0;
+}
+
+.location-ges-count {
+  min-width: 20px;
+  height: 20px;
+  padding: 0 6px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 999px;
+  background: var(--brand);
+  color: white;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+body.location-ges-sheet-open {
+  overflow: hidden;
+}
+
+.location-ges-sheet {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  align-items: end;
+}
+
+.location-ges-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(43, 33, 28, .48);
+}
+
+.location-ges-sheet-panel {
+  position: relative;
+  z-index: 1;
+  width: min(620px, 100%);
+  max-height: min(78dvh, 720px);
+  margin: 0 auto;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 18px 18px calc(18px + env(safe-area-inset-bottom));
+  border-radius: 24px 24px 0 0;
+  background: var(--surface);
+  box-shadow: 0 -18px 50px rgba(43, 33, 28, .22);
+}
+
+.location-ges-sheet-header {
+  position: sticky;
+  top: -18px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: -18px -18px 8px;
+  padding: 18px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+
+.location-ges-sheet-header .eyebrow {
+  margin-bottom: 3px;
+}
+
+.location-ges-sheet-close {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--text);
+  font-size: 26px;
+  line-height: 1;
+}
+
+.location-ges-sheet-help {
+  margin: 8px 0 2px;
+}
+
+.location-ges-sheet-fields {
+  display: grid;
+  gap: 12px;
+}
+
+.location-ges-sheet .ges-location-field {
+  margin-top: 10px;
+  padding: 12px;
+}
+
+.location-ges-sheet .ges-camera-hint,
+.location-ges-sheet .ges-location-field > .field-hint:last-child {
+  font-size: 11px;
+}
+
+.location-ges-sheet-done {
+  position: sticky;
+  bottom: 0;
+  margin-top: 14px;
+}
+
+@media (min-width: 700px) {
+  .location-primary-fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .location-ges-sheet-panel {
+    margin-bottom: 18px;
+    border-radius: 24px;
+  }
+}
+
+@media (max-height: 760px) {
+  .article-wizard .location-wizard-combined .location-primary-fields {
+    gap: 8px;
+  }
+
+  .article-wizard .location-ges-summary-card {
+    margin-top: 10px;
+    padding-block: 9px;
+  }
+}
