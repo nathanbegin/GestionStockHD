@@ -80,7 +80,7 @@ async function openProductImage(card) {
   const loading = modal.querySelector(".product-image-loading");
   const error = modal.querySelector(".product-image-error");
 
-  modal.querySelector("#productImageTitle").textContent = title;
+  modal.dataset.sku = sku;\n  modal.querySelector("#productImageTitle").textContent = title;
   modal.querySelector(".product-image-sku").textContent = card.querySelector(".sku")?.textContent?.trim() || sku;
   img.hidden = true;
   img.removeAttribute("src");
@@ -92,7 +92,7 @@ async function openProductImage(card) {
   modal.querySelector(".product-image-close").focus();
 
   const data = await getProductImage(sku);
-  if (modal.hidden || productSkuFromCard(card) !== sku) return;
+  if (modal.hidden || modal.dataset.sku !== sku) return;
   loading.hidden = true;
 
   if (!data?.imageUrl) {
