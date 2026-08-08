@@ -1,7 +1,15 @@
 (() => {
   const FORM_SELECTOR = "#itemForm, #scanForm";
   const FIELD_SELECTOR = ".ges-location-field[data-ges-location-key]";
+  const LOCATION_FIELD_SELECTOR = ".location-barcode-field";
   const SCAN_FORMATS = ["ean_13", "ean_8", "upc_a", "upc_e", "code_128", "code_39", "codabar", "itf", "qr_code", "data_matrix"];
+  const CAMERA_ICON = `
+    <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M8.5 6 10 4h4l1.5 2H19a2.5 2.5 0 0 1 2.5 2.5v8A2.5 2.5 0 0 1 19 19H5a2.5 2.5 0 0 1-2.5-2.5v-8A2.5 2.5 0 0 1 5 6h3.5Z"/>
+        <circle cx="12" cy="12.5" r="3.5"/>
+      </g>
+    </svg>`;
   let refreshTimer = null;
 
   function localNormalizeBase(value) {
@@ -34,6 +42,21 @@
     if (key === "gesPlusLocations") return `${base}+`;
     if (key === "gesPalletLocations") return `${base}OV`;
     return base;
+  }
+
+  function cameraButton(fileInput, ariaLabel) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "location-camera-button";
+    button.setAttribute("aria-label", ariaLabel);
+    button.title = ariaLabel;
+    button.innerHTML = CAMERA_ICON;
+    button.addEventListener("click", event => {
+      event.preventDefault();
+      event.stopPropagation();
+      fileInput.click();
+    });
+    return button;
   }
 
   function prepareDraft(field) {
@@ -69,30 +92,62 @@
     }
   }
 
+  function enhanceStandardLocationField(host) {
+    if (host.dataset.locationCameraReady === "true") return;
+    const textInput = host.querySelector('input[name="salesLocation"], input[name="stockLocation"]');
+    const fileInput = host.querySelector(".location-barcode-input");
+    if (!textInput || !fileInput) return;
+
+    host.dataset.locationCameraReady = "true";
+    const control = document.createElement("div");
+    control.className = "location-inline-control";
+    textInput.before(control);
+    control.append(textInput);
+
+    const label = textInput.name === "salesLocation"
+      ? "Scanner l’emplacement en tablette"
+      : "Scanner le lieu de ramassage";
+    control.append(cameraButton(fileInput, label));
+
+    const legacyRow = host.querySelector(".button-row");
+    legacyRow?.remove();
+  }
+
   function enhanceGesField(field) {
     if (field.dataset.gesConventionReady === "true") return;
     field.dataset.gesConventionReady = "true";
 
     const key = field.dataset.gesLocationKey;
     const input = field.querySelector(".ges-location-input");
-    if (!input) return;
+    const add = field.querySelector(".ges-location-add");
+    const entry = field.querySelector(".ges-location-entry");
+    if (!input || !add || !entry) return;
 
     input.placeholder = key === "gesPalletLocations"
       ? "Ex. 17-003 → 17-003OV"
       : "Ex. 17-003 → 17-003+";
 
-    const scanId = `gesLocationScan-${key}-${crypto.randomUUID()}`;
-    const row = document.createElement("div");
-    row.className = "ges-location-scan-row";
-    row.innerHTML = `
-      <label class="button compact secondary ges-location-scan-button" for="${scanId}">▣ Scanner la section</label>
-      <input id="${scanId}" class="ges-location-scan-input" type="file" accept="image/*" capture="environment" hidden>
-      <span class="field-hint">Le suffixe est ajouté automatiquement.</span>
-    `;
+    const fileInput = document.createElement("input");
+    fileInput.className = "ges-location-scan-input";
+    fileInput.type = "file";
+    fileInput.accept = "image/*";
+    fileInput.setAttribute("capture", "environment");
+    fileInput.hidden = true;
+    fileInput.addEventListener("change", event => scanIntoField(event.currentTarget));
+    field.append(fileInput);
 
-    const entry = field.querySelector(".ges-location-entry");
-    entry?.insertAdjacentElement("afterend", row);
-    row.querySelector(".ges-location-scan-input")?.addEventListener("change", event => scanIntoField(event.currentTarget));
+    const label = key === "gesPalletLocations"
+      ? "Scanner la section pour ajouter un GES palette"
+      : "Scanner la section pour ajouter un GES+";
+    entry.insertBefore(cameraButton(fileInput, label), add);
+
+    let hint = field.querySelector(".ges-camera-hint");
+    if (!hint) {
+      hint = document.createElement("span");
+      hint.className = "field-hint ges-camera-hint";
+      hint.textContent = "Utilise la caméra pour scanner la section; le suffixe est ajouté automatiquement.";
+      entry.insertAdjacentElement("afterend", hint);
+    }
   }
 
   function enhancePickupPhoto(form) {
@@ -111,11 +166,12 @@
       stock.placeholder = "Ex. 17-003";
       const host = stock.closest(".location-barcode-field");
       const hint = host?.querySelector(".field-hint");
-      if (hint) hint.textContent = "Ex. 17-003. Tu peux scanner la section maintenant et modifier ce lieu plus tard.";
+      if (hint) hint.textContent = "Ex. 17-003. Utilise l’icône caméra pour scanner la section; ce lieu reste modifiable plus tard.";
     }
   }
 
   function enhanceVisibleContent() {
+    document.querySelectorAll(LOCATION_FIELD_SELECTOR).forEach(enhanceStandardLocationField);
     document.querySelectorAll(FIELD_SELECTOR).forEach(enhanceGesField);
     document.querySelectorAll(FORM_SELECTOR).forEach(enhancePickupPhoto);
   }
