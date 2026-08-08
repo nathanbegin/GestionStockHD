@@ -19,6 +19,18 @@
   min-width: 0;
 }
 
+.ges-location-scan-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ges-location-scan-button {
+  margin: 0;
+}
+
 .ges-location-tags,
 .ges-location-display-tags {
   display: flex;
@@ -93,7 +105,12 @@
     grid-template-columns: 1fr;
   }
 
-  .ges-location-entry .button {
+  .ges-location-entry .button,
+  .ges-location-scan-button {
+    width: 100%;
+  }
+
+  .ges-location-scan-row .field-hint {
     width: 100%;
   }
 }
