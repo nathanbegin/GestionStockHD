@@ -1,0 +1,27 @@
+.hd-product-image {
+  display: block;
+  width: min(180px, 42vw);
+  aspect-ratio: 1;
+  margin: .75rem 0 1rem;
+  padding: .5rem;
+  border: 1px solid var(--border, #d9d9d9);
+  border-radius: 12px;
+  background: #fff;
+  overflow: hidden;
+}
+
+.hd-product-image[hidden] {
+  display: none;
+}
+
+.hd-product-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.tour-card .hd-product-image {
+  width: min(240px, 62vw);
+  margin-inline: auto;
+}
