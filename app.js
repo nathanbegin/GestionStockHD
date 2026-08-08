@@ -1,5 +1,6 @@
 const STORAGE_KEY = "restock_app_v1";
 const CLIENT_ID_KEY = "restock_client_id_v1";
+const PENDING_STATUS_KEY = "restock_pending_status_v1";
 const STATUSES = ["a_remplir", "recupere", "rempli", "introuvable"];
 const STATUS_LABELS = { a_remplir: "À remplir", recupere: "Récupéré", rempli: "Rempli", introuvable: "Introuvable" };
 const PRIORITY_LABELS = { high: "Élevée", medium: "Normale", low: "Faible" };
@@ -42,6 +43,7 @@ const defaultState = () => ({
 });
 
 let state = loadState();
+let pendingStatusChanges = loadPendingStatusChanges();
 let authClient = null;
 let authSession = null;
 let currentProfile = null;
@@ -236,6 +238,54 @@ function saveState({ touch = true, sync = true } = {}) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
   if (sync) scheduleAutoSync();
 }
+function loadPendingStatusChanges() {
+  try {
+    const pending = JSON.parse(localStorage.getItem(PENDING_STATUS_KEY) || "[]");
+    return Array.isArray(pending) ? pending.filter(change => change?.id && change?.itemId && STATUSES.includes(change.status)) : [];
+  } catch {
+    return [];
+  }
+}
+function persistPendingStatusChanges() {
+  localStorage.setItem(PENDING_STATUS_KEY, JSON.stringify(pendingStatusChanges));
+  updateSyncIndicator();
+}
+function queuePendingStatusChange(item, historyEntry) {
+  pendingStatusChanges.push({
+    id: crypto.randomUUID(),
+    itemId: item.id,
+    status: item.status,
+    updatedAt: item.updatedAt,
+    updatedBy: item.updatedBy || "",
+    updatedByUserId: item.updatedByUserId || "",
+    history: historyEntry ? { ...historyEntry } : null
+  });
+  persistPendingStatusChanges();
+}
+function applyPendingStatusChanges() {
+  for (const change of pendingStatusChanges) {
+    const item = state.items.find(x => x.id === change.itemId);
+    if (!item) continue;
+    const localTime = new Date(change.updatedAt || 0).getTime();
+    const itemTime = new Date(item.updatedAt || 0).getTime();
+    if (!Number.isFinite(itemTime) || localTime >= itemTime) {
+      item.status = change.status;
+      item.updatedAt = change.updatedAt || item.updatedAt || nowIso();
+      item.updatedBy = change.updatedBy || item.updatedBy || "";
+      item.updatedByUserId = change.updatedByUserId || item.updatedByUserId || "";
+    }
+    if (change.history?.id && !state.history.some(entry => entry.id === change.history.id)) {
+      state.history.push({ ...change.history });
+    }
+  }
+  state.history.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+  state.history = state.history.slice(0, 5000);
+}
+function acknowledgePendingStatusChanges(sentIds) {
+  if (!sentIds?.size) return;
+  pendingStatusChanges = pendingStatusChanges.filter(change => !sentIds.has(change.id));
+  persistPendingStatusChanges();
+}
 function escapeHTML(value = "") { return String(value).replace(/[&<>'"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" }[c])); }
 function formatDate(value) {
   if (!value) return "—";
@@ -280,7 +330,14 @@ function updateSyncIndicator(mode = syncMode) {
   const classes = { error: "error", cloud: "cloud", realtime: "cloud", working: "working", pending: "pending", offline: "offline", local: "local" };
   const labels = { error: "Erreur", cloud: "Cloud", realtime: "En direct", working: "Envoi…", pending: "À envoyer", offline: "Hors ligne", local: "Local" };
   els.syncDot.className = `status-dot ${classes[effective] || "local"}`;
-  els.syncLabel.textContent = labels[effective] || "Local";
+  const pendingCount = pendingStatusChanges.length;
+  if (pendingCount) {
+    els.syncLabel.textContent = effective === "offline"
+      ? `Hors ligne · ${pendingCount} en attente`
+      : `${pendingCount} à envoyer`;
+  } else {
+    els.syncLabel.textContent = labels[effective] || "Local";
+  }
 }
 function getOpenItems() { return state.items.filter(item => !["rempli", "introuvable"].includes(item.status)); }
 function mergeDirectoryIntoEmployees() {
@@ -932,6 +989,7 @@ function setStatus(id, status) {
   item.updatedBy = currentName();
   item.updatedByUserId = currentEmployeeId();
   recordHistory("status_changed", `${formatSku(item.sku)} : ${STATUS_LABELS[previous]} → ${STATUS_LABELS[status]}`, { itemId: item.id, pickupListId: activePickupListId || "", details: { previous, status, stockLocation: item.stockLocation } });
+  queuePendingStatusChange(item, state.history[0]);
   saveState();
 }
 function nextStatus(current) { return STATUSES[(STATUSES.indexOf(current) + 1) % STATUSES.length]; }
@@ -1239,14 +1297,19 @@ async function syncNow({ silent = false, broadcast = true, source = "manual" } =
   }
   syncMode = "working";
   updateSyncIndicator();
+  applyPendingStatusChanges();
+  const sentPendingStatusIds = new Set(pendingStatusChanges.map(change => change.id));
   syncInFlight = (async () => {
     try {
       const data = await apiRequest("/api/sync", { method: "POST", body: { snapshot: state } });
       state = sanitizeState(data.snapshot);
+      acknowledgePendingStatusChanges(sentPendingStatusIds);
+      applyPendingStatusChanges();
       mergeDirectoryIntoEmployees();
       state.meta.lastSyncAt = nowIso();
       saveState({ touch: false, sync: false });
-      syncMode = realtimeActive ? "realtime" : "cloud";
+      if (pendingStatusChanges.length) syncAgain = true;
+      syncMode = pendingStatusChanges.length ? "pending" : (realtimeActive ? "realtime" : "cloud");
       if (!formDirty || source === "manual" || source === "auto") render();
       if (broadcast && realtimeActive && realtimeChannel) {
         await realtimeChannel.send({ type: "broadcast", event: "state-changed", payload: { clientId, updatedAt: state.meta.updatedAt } });
@@ -1254,9 +1317,16 @@ async function syncNow({ silent = false, broadcast = true, source = "manual" } =
       if (!silent) toast("Synchronisation terminée");
       return state;
     } catch (error) {
-      syncMode = "error";
+      syncMode = pendingStatusChanges.length ? "pending" : "error";
       updateSyncIndicator();
-      if (!silent) toast(error.message); else console.warn("Synchronisation", error.message);
+      if (pendingStatusChanges.length) scheduleAutoSync(5000);
+      if (!silent) {
+        toast(pendingStatusChanges.length
+          ? `Réseau instable : ${pendingStatusChanges.length} modification${pendingStatusChanges.length > 1 ? "s" : ""} conservée${pendingStatusChanges.length > 1 ? "s" : ""} localement`
+          : error.message);
+      } else {
+        console.warn("Synchronisation", error.message);
+      }
       return null;
     } finally {
       syncInFlight = null;
@@ -1674,7 +1744,7 @@ els.importInput.addEventListener("change", async event => {
   event.target.value = "";
 });
 window.addEventListener("online", () => {
-  syncMode = state.meta.lastSyncAt ? (realtimeActive ? "realtime" : "cloud") : "local";
+  syncMode = pendingStatusChanges.length ? "pending" : (state.meta.lastSyncAt ? (realtimeActive ? "realtime" : "cloud") : "local");
   updateSyncIndicator();
   scheduleAutoSync(100);
 });
