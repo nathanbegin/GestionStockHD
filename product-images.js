@@ -11,7 +11,7 @@ async function getProductImage(sku) {
   if (productImageCache.has(sku)) return productImageCache.get(sku);
   if (pendingProductImages.has(sku)) return pendingProductImages.get(sku);
 
-  const request = fetch(`/api/product-image?sku=${encodeURIComponent(sku)}`, {
+  const request = fetch(`/api/health?sku=${encodeURIComponent(sku)}`, {
     credentials: "same-origin",
     cache: "force-cache"
   })
