@@ -2,6 +2,23 @@
   const FORM_SELECTOR = "#itemForm, #scanForm";
   let refreshTimer = null;
 
+  // Le module GES construit ses champs dans un timer juste après le rendu.
+  // On décale uniquement l’observer du mode guidé pour qu’il calcule ses étapes
+  // une fois les deux champs principaux et les GES regroupés.
+  const NativeMutationObserver = window.MutationObserver;
+  let wizardObserverHooked = false;
+  window.MutationObserver = function LocationAwareMutationObserver(callback) {
+    if (!wizardObserverHooked && callback?.name === "initializeVisibleForms") {
+      wizardObserverHooked = true;
+      window.MutationObserver = NativeMutationObserver;
+      return new NativeMutationObserver((...args) => {
+        window.setTimeout(() => callback(...args), 45);
+      });
+    }
+    return new NativeMutationObserver(callback);
+  };
+  window.MutationObserver.prototype = NativeMutationObserver.prototype;
+
   function gesCounts(wrapper) {
     const plus = wrapper.querySelector('[data-ges-location-key="gesPlusLocations"]');
     const pallets = wrapper.querySelector('[data-ges-location-key="gesPalletLocations"]');
