@@ -9,7 +9,7 @@
 
 .ges-location-entry {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 44px auto;
   gap: 8px;
   align-items: center;
   margin-top: 8px;
@@ -17,18 +17,6 @@
 
 .ges-location-entry input {
   min-width: 0;
-}
-
-.ges-location-scan-row {
-  display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 8px;
-}
-
-.ges-location-scan-button {
-  margin: 0;
 }
 
 .ges-location-tags,
@@ -100,17 +88,69 @@
   overflow-wrap: anywhere;
 }
 
+.location-inline-control {
+  position: relative;
+  width: 100%;
+}
+
+.location-inline-control > input {
+  padding-right: 54px;
+}
+
+.location-camera-button {
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: var(--surface-2);
+  color: var(--brand-2);
+  box-shadow: none;
+}
+
+.location-camera-button svg {
+  width: 22px;
+  height: 22px;
+  display: block;
+}
+
+.location-camera-button:hover,
+.location-camera-button:focus-visible {
+  border-color: var(--brand);
+  background: #ffe4d2;
+  outline: none;
+}
+
+.location-inline-control > .location-camera-button {
+  position: absolute;
+  z-index: 2;
+  right: 3px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 40px;
+  height: 40px;
+  min-width: 40px;
+  min-height: 40px;
+  border: 0;
+  background: transparent;
+}
+
+.ges-camera-hint {
+  display: block;
+  margin-top: 7px;
+}
+
 @media (max-width: 560px) {
   .ges-location-entry {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) 44px auto;
   }
 
-  .ges-location-entry .button,
-  .ges-location-scan-button {
-    width: 100%;
-  }
-
-  .ges-location-scan-row .field-hint {
-    width: 100%;
+  .ges-location-entry .ges-location-add {
+    width: auto;
+    white-space: nowrap;
   }
 }
