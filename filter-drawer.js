@@ -1,6 +1,7 @@
 (() => {
   let drawerOpen = false;
-  let resetQueue = null;
+  let commitQueue = null;
+  let pendingDirty = false;
   let lastTrigger = null;
 
   const FILTERS = [
@@ -10,6 +11,8 @@
     { id: "filterStatus", label: "Statut", defaultValue: "open" },
     { id: "filterPriority", label: "Priorité", defaultValue: "all" }
   ];
+
+  const FILTER_IDS = new Set(FILTERS.map(filter => filter.id));
 
   const filterIcon = `
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -39,7 +42,7 @@
     }
   }
 
-  function setOpen(open, root = document) {
+  function setOpen(open, root = document, { restoreFocus = true } = {}) {
     const drawer = root.querySelector("#articleFilterDrawer");
     const backdrop = root.querySelector("#articleFilterBackdrop");
     const trigger = root.querySelector("#articleFilterTrigger");
@@ -48,48 +51,83 @@
     backdrop?.classList.toggle("is-open", drawerOpen);
     trigger?.setAttribute("aria-expanded", String(drawerOpen));
     document.body.classList.toggle("filter-drawer-open", drawerOpen);
-    if (drawerOpen) {
-      setTimeout(() => drawer?.querySelector("select")?.focus({ preventScroll: true }), 30);
-    } else if (lastTrigger?.isConnected) {
+
+    // Ne pas forcer le focus sur un <select> à l'ouverture : certains navigateurs
+    // mobiles peuvent ouvrir/repositionner le contrôle natif pendant l'animation.
+    if (!drawerOpen && restoreFocus && lastTrigger?.isConnected) {
       lastTrigger.focus({ preventScroll: true });
     }
   }
 
-  function processResetQueue() {
-    if (!resetQueue?.length) {
-      resetQueue = null;
+  function currentFilterValues(root = document) {
+    return FILTERS.map(filter => ({
+      id: filter.id,
+      value: root.querySelector(`#${filter.id}`)?.value ?? filter.defaultValue
+    }));
+  }
+
+  function processCommitQueue() {
+    if (!commitQueue?.length) {
+      commitQueue = null;
+      pendingDirty = false;
       updateTrigger(document);
       return;
     }
-    const next = resetQueue.shift();
+
+    const next = commitQueue.shift();
     const element = document.querySelector(`#${next.id}`);
-    if (!element) return;
-    if (element.value === next.defaultValue) {
-      queueMicrotask(processResetQueue);
+    if (!element) {
+      queueMicrotask(processCommitQueue);
       return;
     }
-    element.value = next.defaultValue;
+
+    if (element.value === next.value) {
+      queueMicrotask(processCommitQueue);
+      return;
+    }
+
+    element.value = next.value;
     element.dispatchEvent(new Event("change", { bubbles: true }));
+    // app.js fait un render() synchrone. Le MutationObserver rappellera enhance(),
+    // qui poursuivra la file sur le nouveau DOM.
   }
 
-  function resetFilters() {
-    resetQueue = FILTERS.map(filter => ({ ...filter }));
-    drawerOpen = true;
-    processResetQueue();
+  function closeAndCommit(root = document) {
+    const values = currentFilterValues(root);
+    const shouldCommit = pendingDirty;
+    setOpen(false, root, { restoreFocus: !shouldCommit });
+
+    if (!shouldCommit) return;
+    commitQueue = values;
+    pendingDirty = false;
+    queueMicrotask(processCommitQueue);
+  }
+
+  function resetFilters(root = document) {
+    for (const filter of FILTERS) {
+      const element = root.querySelector(`#${filter.id}`);
+      if (element) element.value = filter.defaultValue;
+    }
+    pendingDirty = true;
+    updateTrigger(root);
   }
 
   function enhance() {
     const appMain = document.querySelector("#appMain");
     if (!appMain) return;
     const toolbar = appMain.querySelector(".toolbar.six-filters");
+
     if (!toolbar) {
       drawerOpen = false;
+      pendingDirty = false;
+      commitQueue = null;
       document.body.classList.remove("filter-drawer-open");
       return;
     }
+
     if (toolbar.dataset.filterDrawerReady === "1") {
       updateTrigger(appMain);
-      if (resetQueue?.length) queueMicrotask(processResetQueue);
+      if (commitQueue?.length) queueMicrotask(processCommitQueue);
       return;
     }
 
@@ -117,12 +155,12 @@
     drawer.innerHTML = `
       <div class="filter-drawer-header">
         <div><p class="eyebrow">AFFICHAGE</p><h2>Filtres</h2></div>
-        <button class="filter-drawer-close" type="button" aria-label="Fermer les filtres">×</button>
+        <button class="filter-drawer-close" type="button" aria-label="Fermer et appliquer les filtres">×</button>
       </div>
       <div class="filter-drawer-body"></div>
       <div class="filter-drawer-footer">
         <button class="button" type="button" data-filter-reset>Réinitialiser</button>
-        <button class="button primary" type="button" data-filter-done>Terminé</button>
+        <button class="button primary" type="button" data-filter-done>Afficher</button>
       </div>`;
 
     const body = drawer.querySelector(".filter-drawer-body");
@@ -142,25 +180,33 @@
 
     trigger.addEventListener("click", () => {
       lastTrigger = trigger;
-      setOpen(!drawerOpen, appMain);
+      pendingDirty = false;
+      setOpen(true, appMain);
     });
-    backdrop.addEventListener("click", () => setOpen(false, appMain));
-    drawer.querySelector(".filter-drawer-close")?.addEventListener("click", () => setOpen(false, appMain));
-    drawer.querySelector("[data-filter-done]")?.addEventListener("click", () => setOpen(false, appMain));
-    drawer.querySelector("[data-filter-reset]")?.addEventListener("click", resetFilters);
-    drawer.addEventListener("change", () => {
-      // Conserver l'état actuel. Les changements programmatiques (ex. ouverture
-      // d'un article depuis l'historique) ne doivent jamais ouvrir le drawer.
-      queueMicrotask(() => updateTrigger(document));
+
+    backdrop.addEventListener("click", () => closeAndCommit(appMain));
+    drawer.querySelector(".filter-drawer-close")?.addEventListener("click", () => closeAndCommit(appMain));
+    drawer.querySelector("[data-filter-done]")?.addEventListener("click", () => closeAndCommit(appMain));
+    drawer.querySelector("[data-filter-reset]")?.addEventListener("click", () => resetFilters(appMain));
+
+    drawer.addEventListener("change", event => {
+      if (!FILTER_IDS.has(event.target?.id)) return;
+      if (!drawerOpen) return;
+
+      // Pendant l'utilisation du drawer, empêcher app.js de rerendre toute la page.
+      // Les valeurs seront envoyées à app.js une seule fois lorsque le drawer ferme.
+      event.stopPropagation();
+      pendingDirty = true;
+      updateTrigger(appMain);
     });
 
     updateTrigger(appMain);
-    if (drawerOpen) setOpen(true, appMain);
-    if (resetQueue?.length) queueMicrotask(processResetQueue);
+    if (drawerOpen) setOpen(true, appMain, { restoreFocus: false });
+    if (commitQueue?.length) queueMicrotask(processCommitQueue);
   }
 
   document.addEventListener("keydown", event => {
-    if (event.key === "Escape" && drawerOpen) setOpen(false, document);
+    if (event.key === "Escape" && drawerOpen) closeAndCommit(document);
   });
 
   document.addEventListener("DOMContentLoaded", () => {
