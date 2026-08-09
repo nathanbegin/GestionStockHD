@@ -18,11 +18,47 @@
   <link rel="stylesheet" href="/events-layout.css">
   <link rel="stylesheet" href="/desktop-menu.css">
   <link rel="stylesheet" href="/appearance-settings.css">
+  <style>
+    #bootScreen {
+      min-height: 100dvh;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+      background: var(--bg, #f7f3f0);
+      color: var(--text, #2b211c);
+    }
+    #bootScreen[hidden] { display: none !important; }
+    .boot-card {
+      display: grid;
+      justify-items: center;
+      gap: 10px;
+      text-align: center;
+      font-weight: 800;
+    }
+    .boot-card img {
+      width: 58px;
+      height: 58px;
+      border-radius: 10px;
+    }
+    .boot-card small {
+      color: var(--muted, #74665f);
+      font-weight: 650;
+    }
+    html[data-restoring-view] #appShell:not([hidden]) { visibility: hidden; }
+  </style>
   <script src="/appearance-settings.js"></script>
   <title>Remplissage magasin</title>
 </head>
 <body>
-  <div id="authScreen" class="login-screen">
+  <div id="bootScreen" aria-live="polite">
+    <div class="boot-card">
+      <img src="/icons/THD_logo_resized.jpg" alt="" width="58" height="58">
+      <span>Remplissage magasin</span>
+      <small>Chargement…</small>
+    </div>
+  </div>
+
+  <div id="authScreen" class="login-screen" hidden>
     <div class="auth-wrap">
       <div class="auth-brand">
         <img class="brand-mark brand-logo" src="/icons/THD_logo_resized.jpg" alt="Logo Home Depot" width="58" height="58">
@@ -137,6 +173,7 @@
   <script src="/history-item-links.js"></script>
   <script src="/offline-delete-queue.js"></script>
   <script src="/filter-drawer.js"></script>
+  <script src="/session-view.js"></script>
   <script type="module" src="/app.js"></script>
 </body>
 </html>
