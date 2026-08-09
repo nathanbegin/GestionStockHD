@@ -2,6 +2,7 @@
   const SKU_SELECTOR = 'input[name="sku"]';
   const SCAN_FORM_SELECTOR = "#scanForm";
   let refreshTimer = null;
+  let entryLaunchPending = false;
 
   const CAMERA_ICON = `
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -27,9 +28,27 @@
       </g>
     </svg>`;
 
+  function resetEntryScroll() {
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }
+
+  function stabilizeEntryPosition(form) {
+    if (!form?.matches?.(SCAN_FORM_SELECTOR)) return;
+    const shouldReset = entryLaunchPending || window.scrollY > 12;
+    if (!shouldReset) return;
+    entryLaunchPending = false;
+    resetEntryScroll();
+    window.requestAnimationFrame(() => {
+      resetEntryScroll();
+      window.requestAnimationFrame(resetEntryScroll);
+    });
+    window.setTimeout(resetEntryScroll, 120);
+  }
+
   function goToUnifiedEntry() {
     const main = document.querySelector("#appMain");
     if (!main) return;
+    entryLaunchPending = true;
     const navigation = document.createElement("button");
     navigation.type = "button";
     navigation.hidden = true;
@@ -43,7 +62,7 @@
   function iconButton(source, fileInput) {
     const button = document.createElement("button");
     button.type = "button";
-    button.className = "sku-ai-button";
+    button.className = `sku-ai-button sku-ai-${source}-button`;
     const camera = source === "camera";
     const label = camera
       ? "Prendre une photo de l’étiquette pour l’analyse IA"
@@ -108,7 +127,7 @@
       helper.className = "sku-ai-helper";
       control.insertAdjacentElement("afterend", helper);
     }
-    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>Caméra ou galerie = analyse IA</span>`;
+    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>📷 Caméra · 🖼 Galerie · analyse IA</span>`;
 
     let feedback = label.querySelector(":scope > .sku-ai-feedback");
     if (!feedback) {
@@ -139,12 +158,14 @@
     const legacyHint = label.querySelector(":scope > .field-hint");
     if (legacyHint) legacyHint.hidden = true;
 
-    if (!form.matches(SCAN_FORM_SELECTOR) || label.dataset.skuAiReady === "true") return;
-    const source = findScanSource(form);
-    if (!source?.cameraInput || !source?.galleryInput) return;
-
-    buildScanSkuControl(form, input, label, source);
-    label.dataset.skuAiReady = "true";
+    if (!form.matches(SCAN_FORM_SELECTOR)) return;
+    if (label.dataset.skuAiReady !== "true") {
+      const source = findScanSource(form);
+      if (!source?.cameraInput || !source?.galleryInput) return;
+      buildScanSkuControl(form, input, label, source);
+      label.dataset.skuAiReady = "true";
+    }
+    stabilizeEntryPosition(form);
   }
 
   function harmonizeArticlesEntry() {
@@ -214,6 +235,12 @@
       event.preventDefault();
       event.stopImmediatePropagation();
       goToUnifiedEntry();
+      return;
+    }
+
+    const scanLaunch = event.target.closest?.('[data-action="go"][data-view="scan"]');
+    if (scanLaunch?.closest(".actions-grid, [data-article-entry-options]")) {
+      entryLaunchPending = true;
       return;
     }
 
