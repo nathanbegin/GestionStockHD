@@ -4,8 +4,26 @@ import { createPickupReport } from "../lib/report-pdf.js";
 const MAX_BROWSER_CLOCK_DRIFT_MS = 15 * 60 * 1000;
 const MAX_UTC_OFFSET_MINUTES = 14 * 60;
 
+const MONOCHROME_REPLACEMENTS = [
+  ["0.976 0.388 0.008", "0.250 0.250 0.250"],
+  ["0.15 0.12 0.10", "0.15 0.15 0.15"],
+  ["1 0.94 0.88", "0.9 0.9 0.9"],
+  ["0.93 0.96 0.91", "0.94 0.94 0.94"],
+  ["0.31 0.49 0.31", "0.45 0.45 0.45"],
+  ["0.25 0.18 0.14", "0.20 0.20 0.20"]
+];
+
 function filenamePart(value) {
   return String(value || "ramassage").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-zA-Z0-9_-]+/g, "-").replace(/^-+|-+$/g, "") || "ramassage";
+}
+
+function monochromePdf(bytes) {
+  let binary = Buffer.from(bytes).toString("latin1");
+  for (const [source, replacement] of MONOCHROME_REPLACEMENTS) {
+    if (source.length !== replacement.length) throw new Error("Conversion noir et blanc invalide");
+    binary = binary.split(source).join(replacement);
+  }
+  return Buffer.from(binary, "latin1");
 }
 
 function timeZoneOffsetMinutes(date, timeZone) {
@@ -61,13 +79,15 @@ export default async function handler(request, response) {
   try {
     const { supabase, profile } = await getAuthContext(request);
     const pickupListId = String(request.body?.pickupListId || "");
+    const colorMode = request.body?.colorMode === "bw" ? "bw" : "color";
     const { data, error } = await supabase.from("app_state").select("snapshot").eq("id", "default").single();
     if (error) throw error;
     const snapshot = data?.snapshot || {};
     const pickup = (snapshot.pickupLists || []).find(x => x.id === pickupListId);
     if (!pickup) return json(response, 404, { error: "Liste de ramassage introuvable" });
     const generatedAt = browserLocalGeneratedAt(request.body);
-    const bytes = createPickupReport(snapshot, pickup, profile, generatedAt);
+    let bytes = createPickupReport(snapshot, pickup, profile, generatedAt);
+    if (colorMode === "bw") bytes = monochromePdf(bytes);
     response.status(200);
     response.setHeader("Content-Type", "application/pdf");
     response.setHeader("Content-Disposition", `attachment; filename="${filenamePart(pickup.name)}.pdf"`);
