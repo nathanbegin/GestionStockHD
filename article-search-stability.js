@@ -6,6 +6,7 @@
   let committing = false;
   let editing = false;
   let composing = false;
+  let restoringFocus = false;
   let selectionStart = null;
   let selectionEnd = null;
   let lastValue = "";
@@ -45,20 +46,30 @@
     const input = searchInput();
     if (!input) return;
 
+    // Sauvegarder la sélection AVANT focus(). Sur mobile, focus() déclenche
+    // synchronement focusin sur le nouvel input, dont la sélection initiale est 0.
+    const desiredStart = selectionStart;
+    const desiredEnd = selectionEnd;
+
     if (input.value !== lastValue) input.value = lastValue;
     if (document.activeElement !== input) {
+      restoringFocus = true;
       try {
         input.focus({ preventScroll: true });
       } catch {
         input.focus();
+      } finally {
+        restoringFocus = false;
       }
     }
 
     try {
       const max = input.value.length;
-      const start = Math.min(selectionStart ?? max, max);
-      const end = Math.min(selectionEnd ?? start, max);
+      const start = Math.min(desiredStart ?? max, max);
+      const end = Math.min(desiredEnd ?? start, max);
       input.setSelectionRange(start, end);
+      selectionStart = start;
+      selectionEnd = end;
     } catch {
       // Certains types d'input ne permettent pas setSelectionRange.
     }
@@ -78,7 +89,7 @@
     if (!input) return;
     editing = true;
     clearTimeout(blurTimer);
-    rememberSelection(input);
+    if (!restoringFocus) rememberSelection(input);
   }, true);
 
   document.addEventListener("focusout", event => {
@@ -126,12 +137,27 @@
     }
   }, true);
 
+  // Quand l'utilisateur repositionne explicitement le curseur dans le champ,
+  // mémoriser cette nouvelle position sans attendre le prochain caractère.
+  document.addEventListener("keyup", event => {
+    const input = event.target?.closest?.(SEARCH_SELECTOR);
+    if (input && document.activeElement === input) rememberSelection(input);
+  }, true);
+
+  document.addEventListener("pointerup", event => {
+    const input = event.target?.closest?.(SEARCH_SELECTOR);
+    if (!input) return;
+    queueMicrotask(() => {
+      if (document.activeElement === input) rememberSelection(input);
+    });
+  }, true);
+
   const appMain = document.querySelector("#appMain");
   if (appMain) {
     new MutationObserver(() => {
       if (!editing) return;
       // MutationObserver s'exécute juste après render(), avant le prochain rendu visuel.
-      // On rattache donc le focus au nouvel input avant qu'Android ferme le clavier.
+      // On rattache donc le focus et la sélection au nouvel input avant le rendu visuel.
       restoreSearchFocus();
     }).observe(appMain, { childList: true, subtree: true });
   }
