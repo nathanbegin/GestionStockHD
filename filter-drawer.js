@@ -149,7 +149,8 @@
     drawer.querySelector("[data-filter-done]")?.addEventListener("click", () => setOpen(false, appMain));
     drawer.querySelector("[data-filter-reset]")?.addEventListener("click", resetFilters);
     drawer.addEventListener("change", () => {
-      drawerOpen = true;
+      // Conserver l'état actuel. Les changements programmatiques (ex. ouverture
+      // d'un article depuis l'historique) ne doivent jamais ouvrir le drawer.
       queueMicrotask(() => updateTrigger(document));
     });
 
