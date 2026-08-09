@@ -27,6 +27,7 @@
   let restorationStarted = false;
   let restorationComplete = false;
   let readyTimer = null;
+  let initialized = false;
 
   function savedView() {
     const value = sessionStorage.getItem(VIEW_KEY) || "dashboard";
@@ -123,6 +124,8 @@
   }
 
   function initialize() {
+    if (initialized) return;
+    initialized = true;
     document.documentElement.setAttribute("data-restoring-view", "true");
     document.addEventListener("click", handleNavigationIntent, true);
 
@@ -146,6 +149,8 @@
     restoreWhenAppAppears();
   }
 
-  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", initialize, { once: true });
-  else initialize();
+  // Ce script est chargé juste avant app.js, après tout le HTML utile : on peut
+  // donc installer les observers immédiatement et fermer toute fenêtre de flash.
+  if (document.querySelector("#appShell") && document.querySelector("#authScreen")) initialize();
+  else document.addEventListener("DOMContentLoaded", initialize, { once: true });
 })();
