@@ -128,6 +128,7 @@
   async function setSelectFilter(id, value) {
     const select = document.querySelector(id);
     if (!select || ![...select.options].some(option => option.value === value)) return;
+    if (select.value === value) return;
     select.value = value;
     select.dispatchEvent(new Event("change", { bubbles: true }));
     await wait(60);
@@ -183,14 +184,18 @@
 
   document.addEventListener("click", event => {
     const row = event.target.closest(".history-row-link");
-    if (row) openArticle(row);
+    if (!row) return;
+    event.preventDefault();
+    event.stopPropagation();
+    void openArticle(row);
   });
 
   document.addEventListener("keydown", event => {
     const row = event.target.closest(".history-row-link");
     if (!row || !["Enter", " "].includes(event.key)) return;
     event.preventDefault();
-    openArticle(row);
+    event.stopPropagation();
+    void openArticle(row);
   });
 
   document.addEventListener("DOMContentLoaded", () => {
