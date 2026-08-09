@@ -34,15 +34,11 @@
 
   function stabilizeEntryPosition(form) {
     if (!form?.matches?.(SCAN_FORM_SELECTOR)) return;
-    const shouldReset = entryLaunchPending || window.scrollY > 12;
-    if (!shouldReset) return;
+    if (!entryLaunchPending && window.scrollY <= 12) return;
     entryLaunchPending = false;
     resetEntryScroll();
-    window.requestAnimationFrame(() => {
-      resetEntryScroll();
-      window.requestAnimationFrame(resetEntryScroll);
-    });
-    window.setTimeout(resetEntryScroll, 120);
+    requestAnimationFrame(resetEntryScroll);
+    window.setTimeout(resetEntryScroll, 80);
   }
 
   function goToUnifiedEntry() {
@@ -66,7 +62,7 @@
     const camera = source === "camera";
     const label = camera
       ? "Prendre une photo de l’étiquette pour l’analyse IA"
-      : "Choisir une photo de l’étiquette dans la galerie";
+      : "Importer une photo de l’étiquette pour l’analyse IA";
     button.setAttribute("aria-label", label);
     button.title = label;
     button.innerHTML = camera ? CAMERA_ICON : GALLERY_ICON;
@@ -79,25 +75,56 @@
     return button;
   }
 
-  function findScanSource(form) {
+  function scanSourceSection(form) {
     const main = form.closest("#appMain");
-    if (!main) return null;
     const resultSection = form.closest(".section");
-    const section = [...main.querySelectorAll(":scope > .section")]
-      .find(candidate => candidate !== resultSection && candidate.querySelector("#cameraInput") && candidate.querySelector("#galleryInput"));
-    if (!section) return null;
-    const card = section.querySelector(":scope > .card");
-    return {
-      section,
-      cameraInput: section.querySelector("#cameraInput"),
-      galleryInput: section.querySelector("#galleryInput"),
-      preview: card?.querySelector(":scope > .preview") || null,
-      photoActions: card?.querySelector(":scope > .button-row.top-gap") || null,
-      analysis: card?.querySelector(":scope > .analysis-box") || null
-    };
+    if (!main) return null;
+    return [...main.querySelectorAll(":scope > .section")].find(section =>
+      section !== resultSection && section.querySelector("#cameraInput, #galleryInput")
+    ) || null;
   }
 
-  function buildScanSkuControl(form, input, label, source) {
+  function ensureScanFileInput(id, capture) {
+    let input = document.getElementById(id);
+    if (input) return input;
+    input = document.createElement("input");
+    input.id = id;
+    input.type = "file";
+    input.accept = "image/*";
+    if (capture) input.setAttribute("capture", "environment");
+    input.hidden = true;
+    return input;
+  }
+
+  function moveScanFeedback(sourceSection, label) {
+    if (!sourceSection) return;
+    const card = sourceSection.querySelector(":scope > .card");
+    if (!card) return;
+
+    let feedback = label.querySelector(":scope > .sku-ai-feedback");
+    if (!feedback) {
+      feedback = document.createElement("div");
+      feedback.className = "sku-ai-feedback";
+      label.append(feedback);
+    }
+
+    const preview = card.querySelector(":scope > .preview");
+    const actions = card.querySelector(":scope > .button-row.top-gap");
+    const analysis = card.querySelector(":scope > .analysis-box");
+    if (preview) feedback.append(preview);
+    if (actions) {
+      actions.classList.add("sku-ai-analysis-actions");
+      feedback.append(actions);
+    }
+    if (analysis) feedback.append(analysis);
+    sourceSection.classList.add("sku-ai-source-section");
+  }
+
+  function buildScanSkuControl(form, input, label) {
+    const sourceSection = scanSourceSection(form);
+    const cameraInput = ensureScanFileInput("cameraInput", true);
+    const galleryInput = ensureScanFileInput("galleryInput", false);
+
     let control = label.querySelector(":scope > .sku-ai-control");
     if (!control) {
       control = document.createElement("div");
@@ -113,13 +140,13 @@
       control.append(actions);
     }
     actions.replaceChildren(
-      iconButton("camera", source.cameraInput),
-      iconButton("gallery", source.galleryInput)
+      iconButton("camera", cameraInput),
+      iconButton("gallery", galleryInput)
     );
 
-    source.cameraInput.hidden = true;
-    source.galleryInput.hidden = true;
-    label.append(source.cameraInput, source.galleryInput);
+    cameraInput.hidden = true;
+    galleryInput.hidden = true;
+    label.append(cameraInput, galleryInput);
 
     let helper = label.querySelector(":scope > .sku-ai-helper");
     if (!helper) {
@@ -127,23 +154,11 @@
       helper.className = "sku-ai-helper";
       control.insertAdjacentElement("afterend", helper);
     }
-    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>📷 Caméra · 🖼 Galerie · analyse IA</span>`;
+    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>📷 Photo · 🖼 Importer · analyse IA</span>`;
 
-    let feedback = label.querySelector(":scope > .sku-ai-feedback");
-    if (!feedback) {
-      feedback = document.createElement("div");
-      feedback.className = "sku-ai-feedback";
-      label.append(feedback);
-    }
-    if (source.preview) feedback.append(source.preview);
-    if (source.photoActions) {
-      source.photoActions.classList.add("sku-ai-analysis-actions");
-      feedback.append(source.photoActions);
-    }
-    if (source.analysis) feedback.append(source.analysis);
-
-    source.section.remove();
+    moveScanFeedback(sourceSection, label);
     form.closest(".section")?.classList.add("sku-ai-result-section");
+    label.dataset.skuAiReady = "true";
   }
 
   function enhanceSku(form) {
@@ -158,12 +173,8 @@
     const legacyHint = label.querySelector(":scope > .field-hint");
     if (legacyHint) legacyHint.hidden = true;
 
-    if (!form.matches(SCAN_FORM_SELECTOR)) return;
-    if (label.dataset.skuAiReady !== "true") {
-      const source = findScanSource(form);
-      if (!source?.cameraInput || !source?.galleryInput) return;
-      buildScanSkuControl(form, input, label, source);
-      label.dataset.skuAiReady = "true";
+    if (form.matches(SCAN_FORM_SELECTOR) && label.dataset.skuAiReady !== "true") {
+      buildScanSkuControl(form, input, label);
     }
     stabilizeEntryPosition(form);
   }
@@ -180,14 +191,11 @@
         <span class="article-entry-tile-icon">${ADD_ICON}</span>
         <span>
           <h3>Ajouter un article</h3>
-          <p>Saisis le SKU ou utilise directement la caméra ou la galerie avec l’IA.</p>
-          <span class="article-entry-mode">Clavier · Caméra · Galerie</span>
+          <p>Saisis le SKU ou utilise directement la caméra ou une photo avec l’IA.</p>
+          <span class="article-entry-mode">Clavier · Caméra · Photo</span>
         </span>
         <span class="article-entry-arrow" aria-hidden="true">›</span>
       </button>`;
-
-    const heading = section.querySelector(".section-head p");
-    if (heading) heading.textContent = "Un seul parcours d’ajout : SKU, caméra ou galerie.";
   }
 
   function harmonizeDashboardActions() {
@@ -206,7 +214,7 @@
       const text = scan.querySelector("p");
       if (icon) icon.textContent = "＋";
       if (title) title.textContent = "Ajouter un article";
-      if (text) text.textContent = "SKU, caméra ou galerie avec analyse IA.";
+      if (text) text.textContent = "SKU, caméra ou photo avec analyse IA.";
       manual?.remove();
     }
   }
@@ -239,10 +247,7 @@
     }
 
     const scanLaunch = event.target.closest?.('[data-action="go"][data-view="scan"]');
-    if (scanLaunch?.closest(".actions-grid, [data-article-entry-options]")) {
-      entryLaunchPending = true;
-      return;
-    }
+    if (scanLaunch?.closest(".actions-grid, [data-article-entry-options]")) entryLaunchPending = true;
 
     const legacyManual = event.target.closest?.('[data-action="go"][data-view="manual"]');
     if (legacyManual && legacyManual.closest(".actions-grid, [data-article-entry-options]")) {
