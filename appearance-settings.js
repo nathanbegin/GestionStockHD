@@ -1,5 +1,6 @@
 (() => {
   const STORAGE_KEY = "restock_appearance_v1";
+  const APP_VERSION = "v5-69";
   const PALETTES = ["orange", "blue", "green", "purple"];
   const BRAND_COLORS = {
     orange: "#f96302",
@@ -65,6 +66,21 @@
     else grid.prepend(card);
   }
 
+  function ensureVersionCard() {
+    const title = document.querySelector("#pageTitle")?.textContent?.trim();
+    if (title !== "Réglages") return;
+    const grid = document.querySelector("#appMain .settings-grid");
+    if (!grid || grid.querySelector("#appVersionCard")) return;
+
+    const card = document.createElement("article");
+    card.id = "appVersionCard";
+    card.className = "card";
+    card.innerHTML = `
+      <h2>Application</h2>
+      <p class="small"><strong>Version de l’application :</strong> ${APP_VERSION}</p>`;
+    grid.append(card);
+  }
+
   document.addEventListener("change", event => {
     if (event.target.matches('input[name="appPalette"]')) {
       const settings = loadSettings();
@@ -86,6 +102,10 @@
   document.addEventListener("DOMContentLoaded", () => {
     applySettings();
     ensureSettingsCard();
-    window.setInterval(ensureSettingsCard, 350);
+    ensureVersionCard();
+    window.setInterval(() => {
+      ensureSettingsCard();
+      ensureVersionCard();
+    }, 350);
   });
 })();
