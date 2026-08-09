@@ -111,7 +111,7 @@
 
         const actions = document.createElement("div");
         actions.className = "sku-ai-actions";
-        actions.append(iconButton("gallery", galleryInput), iconButton("camera", cameraInput));
+        actions.append(iconButton("camera", cameraInput), iconButton("gallery", galleryInput));
         control.append(actions);
 
         const helper = document.createElement("div");
@@ -160,7 +160,6 @@
 
       grid.dataset.unifiedQuickActions = "true";
       grid.classList.add("unified-quick-actions");
-      scan.dataset.view = "scan";
       const icon = scan.querySelector(".icon");
       const title = scan.querySelector("h3");
       const text = scan.querySelector("p");
