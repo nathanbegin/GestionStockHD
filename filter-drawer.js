@@ -1,4 +1,12 @@
 (() => {
+  if (!document.querySelector('script[data-article-search-stability]')) {
+    const script = document.createElement("script");
+    script.src = "/article-search-stability.js";
+    script.async = false;
+    script.dataset.articleSearchStability = "true";
+    document.head.appendChild(script);
+  }
+
   let drawerOpen = false;
   let commitQueue = null;
   let lastTrigger = null;
