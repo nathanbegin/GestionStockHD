@@ -18,10 +18,10 @@
   padding: 12px 116px 12px 16px;
   border-radius: 14px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
-  font-size: clamp(25px, 6vw, 32px);
+  font-size: clamp(22px, 4.8vw, 28px);
   font-weight: 850;
   line-height: 1.05;
-  letter-spacing: .035em;
+  letter-spacing: .015em;
   font-variant-numeric: tabular-nums;
 }
 
@@ -29,6 +29,7 @@
   color: #9a8d85;
   opacity: .75;
   font-weight: 700;
+  letter-spacing: .01em;
 }
 
 .sku-ai-actions {
@@ -171,9 +172,10 @@
   .sku-ai-control input[name="sku"] {
     min-height: 64px;
     padding-left: 14px;
-    padding-right: 108px;
+    padding-right: 104px;
     border-radius: 12px;
-    font-size: 27px;
+    font-size: 22px;
+    letter-spacing: .01em;
   }
 
   .sku-ai-button {
@@ -193,5 +195,24 @@
     align-items: flex-start;
     flex-direction: column;
     gap: 2px;
+  }
+}
+
+@media (max-width: 390px) {
+  .sku-ai-control input[name="sku"] {
+    padding-right: 100px;
+    font-size: 20px;
+  }
+
+  .sku-ai-actions {
+    right: 5px;
+    gap: 1px;
+  }
+
+  .sku-ai-button {
+    width: 40px;
+    height: 40px;
+    min-width: 40px;
+    min-height: 40px;
   }
 }
