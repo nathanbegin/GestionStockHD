@@ -127,6 +127,24 @@
   padding-top: 0;
 }
 
+.article-entry-options-grid.unified-article-entry-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.unified-entry-tile {
+  max-width: 760px;
+}
+
+.actions-grid.unified-quick-actions {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
+@media (max-width: 700px) {
+  .actions-grid.unified-quick-actions {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 560px) {
   .sku-ai-control input[name="sku"] {
     min-height: 64px;
@@ -146,5 +164,11 @@
   .sku-ai-button svg {
     width: 24px;
     height: 24px;
+  }
+
+  .sku-ai-helper {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 2px;
   }
 }
