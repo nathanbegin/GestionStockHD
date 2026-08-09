@@ -7,11 +7,15 @@
   display: block;
   width: 100%;
   margin-top: 8px;
+  isolation: isolate;
 }
 
 .sku-ai-control input[name="sku"] {
+  position: relative;
+  z-index: 1;
+  width: 100%;
   min-height: 68px;
-  padding: 12px 106px 12px 16px;
+  padding: 12px 116px 12px 16px;
   border-radius: 14px;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: clamp(25px, 6vw, 32px);
@@ -29,29 +33,37 @@
 
 .sku-ai-actions {
   position: absolute;
+  z-index: 5;
   top: 50%;
-  right: 8px;
+  right: 7px;
   transform: translateY(-50%);
   display: flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
+  pointer-events: auto;
 }
 
 .sku-ai-button {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
+  width: 46px;
+  height: 46px;
+  min-width: 46px;
+  min-height: 46px;
   display: grid;
   place-items: center;
+  margin: 0;
   padding: 0;
   border: 0;
   border-radius: 11px;
-  background: transparent;
+  background: rgba(255,255,255,.96);
   color: var(--brand-2);
+  box-shadow: 0 0 0 1px rgba(249,99,2,.08);
+  cursor: pointer;
+  touch-action: manipulation;
 }
 
 .sku-ai-button:hover,
-.sku-ai-button:focus-visible {
+.sku-ai-button:focus-visible,
+.sku-ai-button:active {
   background: var(--surface-2);
 }
 
@@ -64,6 +76,7 @@
   width: 25px;
   height: 25px;
   display: block;
+  pointer-events: none;
 }
 
 .sku-ai-helper {
@@ -80,6 +93,10 @@
 .sku-ai-helper strong {
   color: var(--brand-2);
   font-weight: 800;
+}
+
+.sku-ai-label > .field-hint[hidden] {
+  display: none !important;
 }
 
 .sku-ai-source-section {
@@ -125,6 +142,7 @@
 
 .article-wizard .sku-ai-label.article-wizard-step {
   padding-top: 0;
+  overflow: visible;
 }
 
 .article-entry-options-grid.unified-article-entry-grid {
@@ -153,7 +171,7 @@
   .sku-ai-control input[name="sku"] {
     min-height: 64px;
     padding-left: 14px;
-    padding-right: 102px;
+    padding-right: 108px;
     border-radius: 12px;
     font-size: 27px;
   }
@@ -162,6 +180,7 @@
     width: 42px;
     height: 42px;
     min-width: 42px;
+    min-height: 42px;
     border-radius: 10px;
   }
 
