@@ -41,9 +41,7 @@
   function normalizeGesValue(value, key) {
     let raw = String(value || "").trim();
     if (!raw) return "";
-
-    if (key === "gesPlusLocations") raw = raw.replace(/\+$/i, "");
-    if (key === "gesPalletLocations") raw = raw.replace(/OV$/i, "");
+    raw = raw.replace(/(?:OV|\+)$/i, "");
 
     const base = normalizeBase(raw).toUpperCase();
     if (!base) return "";
@@ -68,14 +66,33 @@
     return button;
   }
 
-  function mediaActions(cameraInput, galleryInput, cameraLabel, galleryLabel) {
-    const actions = document.createElement("div");
-    actions.className = "location-media-actions";
-    actions.append(
-      mediaButton("camera", cameraInput, cameraLabel),
-      mediaButton("gallery", galleryInput, galleryLabel)
-    );
+  function ensureMediaActions(control, cameraInput, galleryInput, cameraLabel, galleryLabel) {
+    let actions = control.querySelector(":scope > .location-media-actions");
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = "location-media-actions";
+      control.append(actions);
+    }
+
+    const cameraButton = actions.querySelector(".location-camera-button.location-camera-button:not(.location-gallery-button)");
+    const galleryButton = actions.querySelector(".location-gallery-button");
+    if (!cameraButton || !galleryButton || actions.children.length !== 2) {
+      actions.replaceChildren(
+        mediaButton("camera", cameraInput, cameraLabel),
+        mediaButton("gallery", galleryInput, galleryLabel)
+      );
+    }
     return actions;
+  }
+
+  function ensureInlineControl(input) {
+    let control = input.closest(".location-inline-control");
+    if (control) return control;
+    control = document.createElement("div");
+    control.className = "location-inline-control";
+    input.before(control);
+    control.append(input);
+    return control;
   }
 
   function prepareDraft(field) {
@@ -111,93 +128,112 @@
     }
   }
 
+  function ensureGesFileInput(field, kind) {
+    const gallery = kind === "gallery";
+    let input = field.querySelector(
+      gallery
+        ? '.ges-location-scan-input[data-ges-media="gallery"], .ges-location-gallery-input'
+        : '.ges-location-scan-input[data-ges-media="camera"]:not(.ges-location-gallery-input), .ges-location-scan-input:not(.ges-location-gallery-input)'
+    );
+
+    if (!input) {
+      input = document.createElement("input");
+      input.type = "file";
+      input.accept = "image/*";
+      input.hidden = true;
+      input.className = gallery
+        ? "ges-location-scan-input ges-location-gallery-input"
+        : "ges-location-scan-input";
+      field.append(input);
+    }
+
+    input.dataset.gesMedia = kind;
+    input.accept = "image/*";
+    input.hidden = true;
+    if (gallery) input.removeAttribute("capture");
+    else input.setAttribute("capture", "environment");
+
+    if (input.dataset.gesScanReady !== "true") {
+      input.dataset.gesScanReady = "true";
+      input.addEventListener("change", event => scanIntoField(event.currentTarget));
+    }
+    return input;
+  }
+
   function enhanceStandardLocationField(host) {
-    if (host.dataset.locationCameraReady === "true") return;
     const textInput = host.querySelector('input[name="salesLocation"], input[name="stockLocation"]');
-    const cameraInput = host.querySelector(".location-barcode-input");
+    let cameraInput = host.querySelector('.location-barcode-input:not(.location-gallery-input)');
     if (!textInput || !cameraInput) return;
 
-    host.dataset.locationCameraReady = "true";
-    const control = document.createElement("div");
-    control.className = "location-inline-control";
-    textInput.before(control);
-    control.append(textInput);
+    cameraInput.hidden = true;
+    cameraInput.accept = "image/*";
+    cameraInput.setAttribute("capture", "environment");
+    cameraInput.dataset.locationTarget = textInput.name;
 
-    const galleryInput = document.createElement("input");
-    galleryInput.className = "location-barcode-input location-gallery-input";
-    galleryInput.type = "file";
-    galleryInput.accept = "image/*";
+    let galleryInput = host.querySelector(".location-gallery-input");
+    if (!galleryInput) {
+      galleryInput = document.createElement("input");
+      galleryInput.className = "location-barcode-input location-gallery-input";
+      galleryInput.type = "file";
+      galleryInput.accept = "image/*";
+      galleryInput.hidden = true;
+      galleryInput.dataset.locationTarget = textInput.name;
+      host.append(galleryInput);
+    }
+    galleryInput.removeAttribute("capture");
     galleryInput.dataset.locationTarget = textInput.name;
-    galleryInput.hidden = true;
-    host.append(galleryInput);
 
+    const control = ensureInlineControl(textInput);
     const fieldLabel = textInput.name === "salesLocation" ? "l’emplacement en tablette" : "le lieu de ramassage";
-    control.append(mediaActions(
+    ensureMediaActions(
+      control,
       cameraInput,
       galleryInput,
       `Photographier ${fieldLabel}`,
       `Choisir une photo de ${fieldLabel}`
-    ));
+    );
 
-    const legacyRow = host.querySelector(".button-row");
-    legacyRow?.remove();
+    host.querySelector(".button-row")?.remove();
+    host.dataset.locationCameraReady = "true";
   }
 
   function enhanceGesField(field) {
-    if (field.dataset.gesConventionReady === "true") return;
-    field.dataset.gesConventionReady = "true";
-
     const key = field.dataset.gesLocationKey;
     const input = field.querySelector(".ges-location-input");
-    const add = field.querySelector(".ges-location-add");
     const entry = field.querySelector(".ges-location-entry");
-    if (!input || !add || !entry) return;
+    if (!input || !entry) return;
 
     input.placeholder = key === "gesPalletLocations"
       ? "Ex. 17-003 → 17-003OV"
       : "Ex. 17-003 → 17-003+";
 
-    const cameraInput = document.createElement("input");
-    cameraInput.className = "ges-location-scan-input";
-    cameraInput.type = "file";
-    cameraInput.accept = "image/*";
-    cameraInput.setAttribute("capture", "environment");
-    cameraInput.hidden = true;
-    cameraInput.addEventListener("change", event => scanIntoField(event.currentTarget));
-
-    const galleryInput = document.createElement("input");
-    galleryInput.className = "ges-location-scan-input ges-location-gallery-input";
-    galleryInput.type = "file";
-    galleryInput.accept = "image/*";
-    galleryInput.hidden = true;
-    galleryInput.addEventListener("change", event => scanIntoField(event.currentTarget));
-    field.append(cameraInput, galleryInput);
-
-    const control = document.createElement("div");
-    control.className = "location-inline-control ges-location-inline-control";
-    input.before(control);
-    control.append(input);
+    const cameraInput = ensureGesFileInput(field, "camera");
+    const galleryInput = ensureGesFileInput(field, "gallery");
+    const control = ensureInlineControl(input);
+    control.classList.add("ges-location-inline-control");
 
     const kind = key === "gesPalletLocations" ? "GES palette" : "GES+";
-    control.append(mediaActions(
+    ensureMediaActions(
+      control,
       cameraInput,
       galleryInput,
       `Photographier la section pour ajouter un ${kind}`,
       `Choisir une photo de section pour ajouter un ${kind}`
-    ));
+    );
 
     let hint = field.querySelector(".ges-camera-hint");
     if (!hint) {
       hint = document.createElement("span");
       hint.className = "field-hint ges-camera-hint";
-      hint.textContent = "Caméra ou galerie : la section est lue et le suffixe est ajouté automatiquement.";
       entry.insertAdjacentElement("afterend", hint);
     }
+    hint.textContent = "Caméra ou galerie : la section est lue et le suffixe est ajouté automatiquement.";
+    field.dataset.gesConventionReady = "true";
   }
 
   function enhancePickupPhoto(form) {
     const photo = form.querySelector(".stock-photo-field");
-    if (photo && photo.dataset.pickupPhotoReady !== "true") {
+    if (photo) {
       photo.dataset.pickupPhotoReady = "true";
       const title = photo.querySelector(".field-title");
       const hint = photo.querySelector("p.field-hint");
@@ -206,7 +242,7 @@
     }
 
     const stock = form.querySelector('input[name="stockLocation"]');
-    if (stock && stock.dataset.pickupLocationReady !== "true") {
+    if (stock) {
       stock.dataset.pickupLocationReady = "true";
       stock.placeholder = "Ex. 17-003";
       const host = stock.closest(".location-barcode-field");
@@ -226,6 +262,8 @@
     refreshTimer = window.setTimeout(enhanceVisibleContent, 0);
   }
 
+  window.restockEnhanceLocationMedia = enhanceVisibleContent;
+
   document.addEventListener("click", event => {
     const add = event.target.closest?.(".ges-location-add");
     if (add) prepareDraft(add.closest(FIELD_SELECTOR));
@@ -241,5 +279,8 @@
     const appMain = document.querySelector("#appMain");
     if (appMain) new MutationObserver(scheduleRefresh).observe(appMain, { childList: true, subtree: true });
     enhanceVisibleContent();
+    window.setInterval(() => {
+      if (document.querySelector(FORM_SELECTOR)) enhanceVisibleContent();
+    }, 650);
   });
 })();
