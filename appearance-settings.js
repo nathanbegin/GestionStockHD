@@ -1,6 +1,6 @@
 (() => {
   const STORAGE_KEY = "restock_appearance_v1";
-  const APP_VERSION = "v5-75";
+  const APP_VERSION = "v5-76";
   const PALETTES = ["orange", "blue", "green", "purple"];
   const BRAND_COLORS = {
     orange: "#f96302",
