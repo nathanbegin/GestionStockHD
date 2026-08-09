@@ -60,20 +60,55 @@
     return button;
   }
 
-  function scanSourceSection(form) {
+  function findScanSource(form) {
     const main = form.closest("#appMain");
     if (!main) return null;
-    return [...main.querySelectorAll(":scope > .section")]
-      .find(section => section !== form.closest(".section") && section.querySelector("#cameraInput, #galleryInput")) || null;
+    const resultSection = form.closest(".section");
+    const section = [...main.querySelectorAll(":scope > .section")]
+      .find(candidate => candidate !== resultSection && candidate.querySelector("#cameraInput") && candidate.querySelector("#galleryInput"));
+    if (!section) return null;
+    const card = section.querySelector(":scope > .card");
+    return {
+      section,
+      cameraInput: section.querySelector("#cameraInput"),
+      galleryInput: section.querySelector("#galleryInput"),
+      preview: card?.querySelector(":scope > .preview") || null,
+      photoActions: card?.querySelector(":scope > .button-row.top-gap") || null,
+      analysis: card?.querySelector(":scope > .analysis-box") || null
+    };
   }
 
-  function moveScanFeedback(form, label) {
-    const source = scanSourceSection(form);
-    if (!source) return;
-    source.classList.add("sku-ai-source-section");
+  function buildScanSkuControl(form, input, label, source) {
+    let control = label.querySelector(":scope > .sku-ai-control");
+    if (!control) {
+      control = document.createElement("div");
+      control.className = "sku-ai-control";
+      input.before(control);
+      control.append(input);
+    }
 
-    const resultSection = form.closest(".section");
-    resultSection?.classList.add("sku-ai-result-section");
+    let actions = control.querySelector(":scope > .sku-ai-actions");
+    if (!actions) {
+      actions = document.createElement("div");
+      actions.className = "sku-ai-actions";
+      control.append(actions);
+    }
+    actions.replaceChildren(
+      iconButton("camera", source.cameraInput),
+      iconButton("gallery", source.galleryInput)
+    );
+
+    source.cameraInput.hidden = true;
+    source.galleryInput.hidden = true;
+    label.append(source.cameraInput, source.galleryInput);
+
+    let helper = label.querySelector(":scope > .sku-ai-helper");
+    if (!helper) {
+      helper = document.createElement("div");
+      helper.className = "sku-ai-helper";
+      control.insertAdjacentElement("afterend", helper);
+    }
+    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>Caméra ou galerie = analyse IA</span>`;
 
     let feedback = label.querySelector(":scope > .sku-ai-feedback");
     if (!feedback) {
@@ -81,49 +116,35 @@
       feedback.className = "sku-ai-feedback";
       label.append(feedback);
     }
+    if (source.preview) feedback.append(source.preview);
+    if (source.photoActions) {
+      source.photoActions.classList.add("sku-ai-analysis-actions");
+      feedback.append(source.photoActions);
+    }
+    if (source.analysis) feedback.append(source.analysis);
 
-    const sourceCard = source.querySelector(":scope > .card");
-    if (!sourceCard) return;
-    const preview = sourceCard.querySelector(":scope > .preview");
-    const analysis = sourceCard.querySelector(":scope > .analysis-box");
-    if (preview) feedback.append(preview);
-    if (analysis) feedback.append(analysis);
+    source.section.remove();
+    form.closest(".section")?.classList.add("sku-ai-result-section");
   }
 
   function enhanceSku(form) {
     const input = form.querySelector(SKU_SELECTOR);
-    if (!input) return;
-    const label = input.closest("label");
-    if (!label) return;
+    const label = input?.closest("label");
+    if (!input || !label) return;
 
     label.classList.add("sku-ai-label");
     input.placeholder = "1000 000 000";
     input.setAttribute("aria-label", "Numéro d’article, 10 chiffres maximum");
 
-    if (form.matches(SCAN_FORM_SELECTOR)) {
-      const cameraInput = document.querySelector("#cameraInput");
-      const galleryInput = document.querySelector("#galleryInput");
-      if (cameraInput && galleryInput && !label.querySelector(".sku-ai-control")) {
-        const control = document.createElement("div");
-        control.className = "sku-ai-control";
-        input.before(control);
-        control.append(input);
+    const legacyHint = label.querySelector(":scope > .field-hint");
+    if (legacyHint) legacyHint.hidden = true;
 
-        const actions = document.createElement("div");
-        actions.className = "sku-ai-actions";
-        actions.append(iconButton("camera", cameraInput), iconButton("gallery", galleryInput));
-        control.append(actions);
+    if (!form.matches(SCAN_FORM_SELECTOR) || label.dataset.skuAiReady === "true") return;
+    const source = findScanSource(form);
+    if (!source?.cameraInput || !source?.galleryInput) return;
 
-        const helper = document.createElement("div");
-        helper.className = "sku-ai-helper";
-        helper.innerHTML = `<span>10 chiffres · format <strong>1000 000 000</strong></span><span>Photo = analyse IA</span>`;
-        control.insertAdjacentElement("afterend", helper);
-
-        const legacyHint = label.querySelector(":scope > .field-hint");
-        if (legacyHint) legacyHint.hidden = true;
-      }
-      moveScanFeedback(form, label);
-    }
+    buildScanSkuControl(form, input, label, source);
+    label.dataset.skuAiReady = "true";
   }
 
   function harmonizeArticlesEntry() {
@@ -138,22 +159,21 @@
         <span class="article-entry-tile-icon">${ADD_ICON}</span>
         <span>
           <h3>Ajouter un article</h3>
-          <p>Saisie du SKU, caméra ou galerie avec analyse IA dans le même parcours.</p>
-          <span class="article-entry-mode">Manuel · Caméra · Galerie</span>
+          <p>Saisis le SKU ou utilise directement la caméra ou la galerie avec l’IA.</p>
+          <span class="article-entry-mode">Clavier · Caméra · Galerie</span>
         </span>
         <span class="article-entry-arrow" aria-hidden="true">›</span>
       </button>`;
 
     const heading = section.querySelector(".section-head p");
-    if (heading) heading.textContent = "Un seul parcours pour saisir le numéro ou utiliser une photo avec l’IA.";
+    if (heading) heading.textContent = "Un seul parcours d’ajout : SKU, caméra ou galerie.";
   }
 
   function harmonizeDashboardActions() {
     const main = document.querySelector("#appMain");
     if (!main || main.querySelector("#scanForm, #itemForm, #filterSearch")) return;
 
-    const grids = [...main.querySelectorAll(".actions-grid")];
-    for (const grid of grids) {
+    for (const grid of main.querySelectorAll(".actions-grid")) {
       const scan = grid.querySelector('[data-action="go"][data-view="scan"]');
       const manual = grid.querySelector('[data-action="go"][data-view="manual"]');
       if (!scan || grid.dataset.unifiedQuickActions === "true") continue;
@@ -165,16 +185,15 @@
       const text = scan.querySelector("p");
       if (icon) icon.textContent = "＋";
       if (title) title.textContent = "Ajouter un article";
-      if (text) text.textContent = "Saisir le SKU ou utiliser caméra / galerie avec l’IA.";
+      if (text) text.textContent = "SKU, caméra ou galerie avec analyse IA.";
       manual?.remove();
     }
   }
 
   function enhancePageTitle() {
-    if (document.querySelector("#scanForm")) {
-      const title = document.querySelector("#pageTitle");
-      if (title) title.textContent = "Ajouter un article";
-    }
+    if (!document.querySelector("#scanForm")) return;
+    const title = document.querySelector("#pageTitle");
+    if (title) title.textContent = "Ajouter un article";
   }
 
   function enhanceVisibleContent() {
@@ -190,11 +209,20 @@
   }
 
   document.addEventListener("click", event => {
-    const button = event.target.closest?.("[data-unified-article-entry]");
-    if (!button) return;
-    event.preventDefault();
-    event.stopPropagation();
-    goToUnifiedEntry();
+    const unified = event.target.closest?.("[data-unified-article-entry]");
+    if (unified) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      goToUnifiedEntry();
+      return;
+    }
+
+    const legacyManual = event.target.closest?.('[data-action="go"][data-view="manual"]');
+    if (legacyManual && legacyManual.closest(".actions-grid, [data-article-entry-options]")) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      goToUnifiedEntry();
+    }
   }, true);
 
   document.addEventListener("DOMContentLoaded", () => {
