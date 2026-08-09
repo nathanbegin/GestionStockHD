@@ -19,6 +19,10 @@
   };
   window.MutationObserver.prototype = NativeMutationObserver.prototype;
 
+  function refreshLocationMedia() {
+    window.setTimeout(() => window.restockEnhanceLocationMedia?.(), 0);
+  }
+
   function gesCounts(wrapper) {
     const plus = wrapper.querySelector('[data-ges-location-key="gesPlusLocations"]');
     const pallets = wrapper.querySelector('[data-ges-location-key="gesPalletLocations"]');
@@ -55,6 +59,7 @@
     if (!sheet) return;
     sheet.hidden = false;
     document.body.classList.add("location-ges-sheet-open");
+    refreshLocationMedia();
     window.setTimeout(() => {
       sheet.querySelector(".location-ges-sheet-close")?.focus({ preventScroll: true });
     }, 0);
@@ -73,6 +78,7 @@
     if (form.dataset.locationWizardCombined === "true") {
       const wrapper = form.querySelector(".location-wizard-combined");
       if (wrapper) updateGesSummary(wrapper);
+      refreshLocationMedia();
       return;
     }
 
@@ -81,8 +87,6 @@
     const stockInput = form.querySelector('input[name="stockLocation"]');
     const salesPanel = salesInput?.closest(".location-barcode-field");
     const stockPanel = stockInput?.closest(".location-barcode-field");
-    // Les champs GES sont injectés à l'intérieur du panneau de ramassage,
-    // pas comme enfants directs de .form-grid. On les cherche donc dans tout le formulaire.
     const gesFields = [...form.querySelectorAll(".ges-location-field")];
     if (!grid || !salesPanel || !stockPanel || gesFields.length < 2) return;
 
@@ -149,10 +153,12 @@
 
     form.dataset.locationWizardCombined = "true";
     updateGesSummary(wrapper);
+    refreshLocationMedia();
   }
 
   function enhanceVisibleForms() {
     document.querySelectorAll(FORM_SELECTOR).forEach(combineLocationStep);
+    refreshLocationMedia();
   }
 
   function scheduleRefresh() {
