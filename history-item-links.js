@@ -11,6 +11,7 @@
     pickup_deleted: "Liste supprimée"
   };
   let enhanceScheduled = false;
+  let openingArticle = false;
 
   function loadState() {
     try {
@@ -125,44 +126,36 @@
     return new Promise(resolve => window.setTimeout(resolve, ms));
   }
 
-  async function setSelectFilter(id, value) {
-    const select = document.querySelector(id);
-    if (!select || ![...select.options].some(option => option.value === value)) return;
-    if (select.value === value) return;
-    select.value = value;
-    select.dispatchEvent(new Event("change", { bubbles: true }));
-    await wait(60);
-  }
-
   async function openArticle(row) {
+    if (openingArticle) return;
     const sku = row.dataset.historyItemSku || "";
     if (!sku) return;
 
-    document.querySelector('.bottom-nav [data-nav="lists"]')?.click();
-    await wait(80);
+    openingArticle = true;
+    try {
+      document.body.classList.remove("filter-drawer-open");
+      document.querySelector('.bottom-nav [data-nav="lists"]')?.click();
+      await wait(90);
 
-    const search = document.querySelector("#filterSearch");
-    if (!search) return;
-    search.value = sku;
-    search.dispatchEvent(new Event("input", { bubbles: true }));
-    await wait(230);
+      const search = document.querySelector("#filterSearch");
+      if (!search) return;
 
-    await setSelectFilter("#filterList", "all");
-    await setSelectFilter("#filterDepartment", "all");
-    await setSelectFilter("#filterEmployee", "all");
-    await setSelectFilter("#filterStatus", "all");
-    await setSelectFilter("#filterPriority", "all");
-    await wait(220);
+      search.value = sku;
+      search.dispatchEvent(new Event("input", { bubbles: true }));
+      await wait(140);
 
-    const targetDigits = skuDigits(sku);
-    const card = [...document.querySelectorAll(".item-card")].find(article =>
-      skuDigits(article.querySelector(".sku")?.textContent) === targetDigits
-    );
-    if (!card) return;
+      const targetDigits = skuDigits(sku);
+      const card = [...document.querySelectorAll(".item-card")].find(article =>
+        skuDigits(article.querySelector(".sku")?.textContent) === targetDigits
+      );
+      if (!card) return;
 
-    card.classList.add("history-item-target");
-    card.scrollIntoView({ behavior: "smooth", block: "center" });
-    window.setTimeout(() => card.classList.remove("history-item-target"), 2600);
+      card.classList.add("history-item-target");
+      card.scrollIntoView({ behavior: "auto", block: "center" });
+      window.setTimeout(() => card.classList.remove("history-item-target"), 2200);
+    } finally {
+      window.setTimeout(() => { openingArticle = false; }, 180);
+    }
   }
 
   function installStyles() {
@@ -173,7 +166,7 @@
       .history-row-link { cursor: pointer; transition: transform .15s ease, box-shadow .15s ease, border-color .15s ease; }
       .history-row-link:hover { transform: translateY(-1px); border-color: rgba(249,99,2,.38); box-shadow: var(--shadow); }
       .history-row-link:focus-visible { outline: 3px solid rgba(249,99,2,.30); outline-offset: 3px; }
-      .item-card.history-item-target { animation: historyItemTarget 2.6s ease; }
+      .item-card.history-item-target { animation: historyItemTarget 2.2s ease; }
       @keyframes historyItemTarget {
         0%, 100% { box-shadow: 0 3px 12px rgba(92,46,18,.05); }
         18%, 72% { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(249,99,2,.18), var(--shadow); }
@@ -188,7 +181,7 @@
     event.preventDefault();
     event.stopPropagation();
     void openArticle(row);
-  });
+  }, true);
 
   document.addEventListener("keydown", event => {
     const row = event.target.closest(".history-row-link");
@@ -196,7 +189,7 @@
     event.preventDefault();
     event.stopPropagation();
     void openArticle(row);
-  });
+  }, true);
 
   document.addEventListener("DOMContentLoaded", () => {
     installStyles();
