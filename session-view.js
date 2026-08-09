@@ -3,6 +3,7 @@
   const RESTORABLE_VIEWS = new Set([
     "dashboard",
     "lists",
+    "events",
     "assignments",
     "pickups",
     "more",
@@ -14,6 +15,7 @@
   const TITLE_TO_VIEW = new Map([
     ["Aperçu", "dashboard"],
     ["Articles", "lists"],
+    ["Événements", "events"],
     ["Attribution", "assignments"],
     ["Listes de ramassage", "pickups"],
     ["Plus", "more"],
@@ -50,6 +52,14 @@
 
   function navigateToView(view) {
     if (view === "dashboard") return false;
+
+    if (view === "events") {
+      const eventsButton = document.querySelector("#eventsNavButton");
+      if (!eventsButton) return false;
+      eventsButton.click();
+      return true;
+    }
+
     const main = document.querySelector("#appMain");
     if (!main) return false;
 
@@ -103,6 +113,11 @@
   }
 
   function handleNavigationIntent(event) {
+    if (event.target.closest?.("#eventsNavButton")) {
+      saveView("events");
+      return;
+    }
+
     const nav = event.target.closest?.("[data-nav]");
     if (nav?.dataset.nav) {
       saveView(nav.dataset.nav);
