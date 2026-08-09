@@ -36,17 +36,29 @@
   function updateTrigger(root = document) {
     const trigger = root.querySelector("#articleFilterTrigger");
     if (!trigger) return;
+
     const count = activeCount(root);
-    trigger.setAttribute("aria-label", count ? `Filtres, ${count} actif${count > 1 ? "s" : ""}` : "Filtres");
-    trigger.title = count ? `${count} filtre${count > 1 ? "s" : ""} actif${count > 1 ? "s" : ""}` : "Filtres";
-    trigger.querySelector(".filter-count")?.remove();
-    if (count) {
-      const badge = document.createElement("span");
+    const ariaLabel = count ? `Filtres, ${count} actif${count > 1 ? "s" : ""}` : "Filtres";
+    const title = count ? `${count} filtre${count > 1 ? "s" : ""} actif${count > 1 ? "s" : ""}` : "Filtres";
+
+    if (trigger.getAttribute("aria-label") !== ariaLabel) trigger.setAttribute("aria-label", ariaLabel);
+    if (trigger.title !== title) trigger.title = title;
+
+    let badge = trigger.querySelector(":scope > .filter-count");
+    if (!count) {
+      badge?.remove();
+      return;
+    }
+
+    if (!badge) {
+      badge = document.createElement("span");
       badge.className = "filter-count";
-      badge.textContent = String(count);
       badge.setAttribute("aria-hidden", "true");
       trigger.appendChild(badge);
     }
+
+    const nextText = String(count);
+    if (badge.textContent !== nextText) badge.textContent = nextText;
   }
 
   function setOpen(open, root = document, { restoreFocus = true } = {}) {
@@ -100,8 +112,6 @@
 
     source.value = next.value;
     source.dispatchEvent(new Event("change", { bubbles: true }));
-    // app.js reconstruit la page de façon synchrone. Le MutationObserver
-    // reprend la file sur le nouveau DOM après ce rendu.
   }
 
   function applyAndClose(root = document) {
@@ -209,13 +219,20 @@
 
     drawer.addEventListener("change", event => {
       if (!event.target?.dataset?.filterSource) return;
-      // Les copies locales ne sont pas les vrais filtres de app.js : aucun
-      // rendu de la page n'est déclenché pendant l'utilisation du drawer.
       updateTrigger(appMain);
     });
 
     updateTrigger(appMain);
     if (commitQueue?.length) queueMicrotask(processCommitQueue);
+  }
+
+  function mutationComesOnlyFromFilterUi(mutations) {
+    return mutations.length > 0 && mutations.every(mutation => {
+      const target = mutation.target?.nodeType === Node.ELEMENT_NODE
+        ? mutation.target
+        : mutation.target?.parentElement;
+      return Boolean(target?.closest?.("#articleFilterDrawer, #articleFilterTrigger"));
+    });
   }
 
   document.addEventListener("keydown", event => {
@@ -226,6 +243,9 @@
     const appMain = document.querySelector("#appMain");
     if (!appMain) return;
     enhance();
-    new MutationObserver(enhance).observe(appMain, { childList: true, subtree: true });
+    new MutationObserver(mutations => {
+      if (mutationComesOnlyFromFilterUi(mutations)) return;
+      enhance();
+    }).observe(appMain, { childList: true, subtree: true });
   });
 })();
