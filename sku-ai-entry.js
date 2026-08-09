@@ -1,8 +1,10 @@
 (() => {
   const SKU_SELECTOR = 'input[name="sku"]';
   const SCAN_FORM_SELECTOR = "#scanForm";
+  const MEDIA_IDS = new Set(["cameraInput", "galleryInput"]);
   let refreshTimer = null;
   let entryLaunchPending = false;
+  let autoAnalyzeToken = 0;
 
   const CAMERA_ICON = `
     <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">
@@ -38,7 +40,7 @@
     entryLaunchPending = false;
     resetEntryScroll();
     requestAnimationFrame(resetEntryScroll);
-    window.setTimeout(resetEntryScroll, 80);
+    window.setTimeout(resetEntryScroll, 100);
   }
 
   function goToUnifiedEntry() {
@@ -55,14 +57,40 @@
     navigation.remove();
   }
 
-  function iconButton(source, fileInput) {
+  function findLegacyPhotoSection(form) {
+    const main = form.closest("#appMain");
+    const formSection = form.closest(".section");
+    if (!main) return null;
+    return [...main.querySelectorAll(":scope > .section")].find(section =>
+      section !== formSection && (section.querySelector(".scan-zone") || section.querySelector("#cameraInput") || section.querySelector("#galleryInput"))
+    ) || null;
+  }
+
+  function ensureFileInput(form, id, capture = false) {
+    let input = document.getElementById(id);
+    if (!input) {
+      input = document.createElement("input");
+      input.id = id;
+      input.type = "file";
+      input.accept = "image/*";
+      if (capture) input.setAttribute("capture", "environment");
+      input.hidden = true;
+      form.append(input);
+    }
+    input.hidden = true;
+    if (capture) input.setAttribute("capture", "environment");
+    else input.removeAttribute("capture");
+    return input;
+  }
+
+  function iconButton(kind, fileInput) {
+    const camera = kind === "camera";
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `sku-ai-button sku-ai-${source}-button`;
-    const camera = source === "camera";
+    button.className = `sku-ai-button sku-ai-${kind}-button`;
     const label = camera
-      ? "Prendre une photo de l’étiquette pour l’analyse IA"
-      : "Importer une photo de l’étiquette pour l’analyse IA";
+      ? "Prendre une photo de l’étiquette avec la caméra et l’analyser avec l’IA"
+      : "Importer une photo de l’étiquette et l’analyser avec l’IA";
     button.setAttribute("aria-label", label);
     button.title = label;
     button.innerHTML = camera ? CAMERA_ICON : GALLERY_ICON;
@@ -75,57 +103,49 @@
     return button;
   }
 
-  function scanSourceSection(form) {
-    const main = form.closest("#appMain");
-    const resultSection = form.closest(".section");
-    if (!main) return null;
-    return [...main.querySelectorAll(":scope > .section")].find(section =>
-      section !== resultSection && section.querySelector("#cameraInput, #galleryInput")
-    ) || null;
-  }
-
-  function ensureScanFileInput(id, capture) {
-    let input = document.getElementById(id);
-    if (input) return input;
-    input = document.createElement("input");
-    input.id = id;
-    input.type = "file";
-    input.accept = "image/*";
-    if (capture) input.setAttribute("capture", "environment");
-    input.hidden = true;
-    return input;
-  }
-
-  function moveScanFeedback(sourceSection, label) {
-    if (!sourceSection) return;
-    const card = sourceSection.querySelector(":scope > .card");
-    if (!card) return;
-
-    let feedback = label.querySelector(":scope > .sku-ai-feedback");
+  function movePhotoFeedback(sourceSection, fieldLabel) {
+    let feedback = fieldLabel.querySelector(":scope > .sku-ai-feedback");
     if (!feedback) {
       feedback = document.createElement("div");
       feedback.className = "sku-ai-feedback";
-      label.append(feedback);
+      fieldLabel.append(feedback);
     }
 
-    const preview = card.querySelector(":scope > .preview");
-    const actions = card.querySelector(":scope > .button-row.top-gap");
-    const analysis = card.querySelector(":scope > .analysis-box");
-    if (preview) feedback.append(preview);
-    if (actions) {
-      actions.classList.add("sku-ai-analysis-actions");
-      feedback.append(actions);
+    const sourceCard = sourceSection?.querySelector(":scope > .card");
+    if (sourceCard) {
+      const preview = sourceCard.querySelector(":scope > .preview");
+      const actions = sourceCard.querySelector(":scope > .button-row.top-gap");
+      const analysis = sourceCard.querySelector(":scope > .analysis-box");
+      if (preview) feedback.append(preview);
+      if (actions) {
+        actions.classList.add("sku-ai-analysis-actions");
+        feedback.append(actions);
+      }
+      if (analysis) feedback.append(analysis);
     }
-    if (analysis) feedback.append(analysis);
-    sourceSection.classList.add("sku-ai-source-section");
+
+    if (sourceSection) sourceSection.classList.add("sku-ai-source-section");
   }
 
-  function buildScanSkuControl(form, input, label) {
-    const sourceSection = scanSourceSection(form);
-    const cameraInput = ensureScanFileInput("cameraInput", true);
-    const galleryInput = ensureScanFileInput("galleryInput", false);
+  function enhanceScanSku(form) {
+    const input = form.querySelector(SKU_SELECTOR);
+    const fieldLabel = input?.closest("label");
+    if (!input || !fieldLabel) return;
 
-    let control = label.querySelector(":scope > .sku-ai-control");
+    fieldLabel.classList.add("sku-ai-label");
+    input.placeholder = "1000 000 000";
+    input.setAttribute("aria-label", "Numéro d’article, 10 chiffres maximum");
+
+    const legacyHint = fieldLabel.querySelector(":scope > .field-hint");
+    if (legacyHint) legacyHint.hidden = true;
+
+    if (!form.matches(SCAN_FORM_SELECTOR)) return;
+
+    const sourceSection = findLegacyPhotoSection(form);
+    const cameraInput = ensureFileInput(form, "cameraInput", true);
+    const galleryInput = ensureFileInput(form, "galleryInput", false);
+
+    let control = input.closest(".sku-ai-control");
     if (!control) {
       control = document.createElement("div");
       control.className = "sku-ai-control";
@@ -139,44 +159,46 @@
       actions.className = "sku-ai-actions";
       control.append(actions);
     }
-    actions.replaceChildren(
-      iconButton("camera", cameraInput),
-      iconButton("gallery", galleryInput)
-    );
 
-    cameraInput.hidden = true;
-    galleryInput.hidden = true;
-    label.append(cameraInput, galleryInput);
+    if (actions.dataset.mediaReady !== "true") {
+      actions.dataset.mediaReady = "true";
+      actions.replaceChildren(
+        iconButton("camera", cameraInput),
+        iconButton("gallery", galleryInput)
+      );
+    }
 
-    let helper = label.querySelector(":scope > .sku-ai-helper");
+    if (!fieldLabel.querySelector(":scope > #cameraInput")) fieldLabel.append(cameraInput);
+    if (!fieldLabel.querySelector(":scope > #galleryInput")) fieldLabel.append(galleryInput);
+
+    let helper = fieldLabel.querySelector(":scope > .sku-ai-helper");
     if (!helper) {
       helper = document.createElement("div");
       helper.className = "sku-ai-helper";
       control.insertAdjacentElement("afterend", helper);
     }
-    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>📷 Photo · 🖼 Importer · analyse IA</span>`;
+    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>Caméra ou photo = analyse IA automatique</span>`;
 
-    moveScanFeedback(sourceSection, label);
+    movePhotoFeedback(sourceSection, fieldLabel);
     form.closest(".section")?.classList.add("sku-ai-result-section");
-    label.dataset.skuAiReady = "true";
+    fieldLabel.dataset.skuAiReady = "true";
+    stabilizeEntryPosition(form);
   }
 
-  function enhanceSku(form) {
-    const input = form.querySelector(SKU_SELECTOR);
-    const label = input?.closest("label");
-    if (!input || !label) return;
-
-    label.classList.add("sku-ai-label");
-    input.placeholder = "1000 000 000";
-    input.setAttribute("aria-label", "Numéro d’article, 10 chiffres maximum");
-
-    const legacyHint = label.querySelector(":scope > .field-hint");
-    if (legacyHint) legacyHint.hidden = true;
-
-    if (form.matches(SCAN_FORM_SELECTOR) && label.dataset.skuAiReady !== "true") {
-      buildScanSkuControl(form, input, label);
-    }
-    stabilizeEntryPosition(form);
+  function scheduleAutomaticAnalysis() {
+    const token = ++autoAnalyzeToken;
+    let attempts = 0;
+    const tryAnalyze = () => {
+      if (token !== autoAnalyzeToken) return;
+      attempts += 1;
+      const button = document.querySelector('#scanForm [data-action="analyze-photo"], .sku-ai-feedback [data-action="analyze-photo"]');
+      if (button && !button.disabled) {
+        button.click();
+        return;
+      }
+      if (attempts < 24) window.setTimeout(tryAnalyze, 200);
+    };
+    window.setTimeout(tryAnalyze, 220);
   }
 
   function harmonizeArticlesEntry() {
@@ -192,7 +214,7 @@
         <span>
           <h3>Ajouter un article</h3>
           <p>Saisis le SKU ou utilise directement la caméra ou une photo avec l’IA.</p>
-          <span class="article-entry-mode">Clavier · Caméra · Photo</span>
+          <span class="article-entry-mode">Clavier · Caméra · Photo IA</span>
         </span>
         <span class="article-entry-arrow" aria-hidden="true">›</span>
       </button>`;
@@ -220,13 +242,13 @@
   }
 
   function enhancePageTitle() {
-    if (!document.querySelector("#scanForm")) return;
+    if (!document.querySelector(SCAN_FORM_SELECTOR)) return;
     const title = document.querySelector("#pageTitle");
     if (title) title.textContent = "Ajouter un article";
   }
 
   function enhanceVisibleContent() {
-    document.querySelectorAll("#itemForm, #scanForm").forEach(enhanceSku);
+    document.querySelectorAll("#itemForm, #scanForm").forEach(enhanceScanSku);
     harmonizeArticlesEntry();
     harmonizeDashboardActions();
     enhancePageTitle();
@@ -236,6 +258,10 @@
     clearTimeout(refreshTimer);
     refreshTimer = window.setTimeout(enhanceVisibleContent, 0);
   }
+
+  document.addEventListener("change", event => {
+    if (MEDIA_IDS.has(event.target?.id) && event.target.files?.[0]) scheduleAutomaticAnalysis();
+  }, true);
 
   document.addEventListener("click", event => {
     const unified = event.target.closest?.("[data-unified-article-entry]");
@@ -261,5 +287,8 @@
     const main = document.querySelector("#appMain");
     if (main) new MutationObserver(scheduleRefresh).observe(main, { childList: true, subtree: true });
     enhanceVisibleContent();
+    window.setInterval(() => {
+      if (document.querySelector("#scanForm")) enhanceVisibleContent();
+    }, 500);
   });
 })();
