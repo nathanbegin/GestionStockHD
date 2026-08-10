@@ -1,4 +1,5 @@
 import { getAuthContext, json, sendError } from "../lib/auth.js";
+import analyzeHomeDepotScreen from "../lib/analyze-hd-screen.js";
 
 const MAX_DATA_URL_LENGTH = 4_000_000;
 const MAX_DEPARTMENTS = 60;
@@ -178,6 +179,10 @@ function getRefusal(data) {
 }
 
 export default async function handler(request, response) {
+  if (request.body?.mode === "home-depot-screen") {
+    return analyzeHomeDepotScreen(request, response);
+  }
+
   if (request.method !== "POST") {
     return json(response, 405, { error: "Méthode non permise" });
   }
@@ -227,9 +232,6 @@ export default async function handler(request, response) {
       }
     };
 
-    // GPT-5 nano raisonne par défaut. Une faible limite de sortie peut donc être
-    // consommée avant la génération du JSON. L'effort minimal réduit ce risque,
-    // accélère la réponse et diminue le coût.
     if (/^gpt-5(?:-|$)/.test(model)) {
       requestBody.reasoning = { effort: "minimal" };
     }
