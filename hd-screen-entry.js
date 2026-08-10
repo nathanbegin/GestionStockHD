@@ -139,9 +139,7 @@
     });
   }
 
-  function modal() {
-    return document.querySelector(`#${MODAL_ID}`);
-  }
+  function modal() { return document.querySelector(`#${MODAL_ID}`); }
 
   function openModal() {
     createModal();
@@ -204,10 +202,10 @@
   async function apiAnalyze(image) {
     const token = storedAccessToken();
     if (!token) throw new Error("Session introuvable");
-    const response = await fetch("/api/analyze-hd-screen", {
+    const response = await fetch("/api/analyze", {
       method: "POST",
       headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
-      body: JSON.stringify({ image, departments: departments() }),
+      body: JSON.stringify({ mode: "home-depot-screen", image, departments: departments() }),
       cache: "no-store"
     });
     const data = await response.json().catch(() => ({}));
@@ -333,7 +331,7 @@
   }
 
   function normalizeGesBase(value) {
-    let raw = String(value || "").trim().replace(/(?:OV|\+)$/i, "");
+    const raw = String(value || "").trim().replace(/(?:OV|\+)$/i, "");
     return window.restockLocationCodes?.normalizeLocationCode?.(raw) || raw;
   }
 
