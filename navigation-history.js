@@ -100,8 +100,6 @@
       return;
     }
 
-    // Une entrée racine + une entrée courante permettent au bouton Retour de
-    // fermer un panneau même lorsque l'application vient d'être ouverte.
     history.replaceState(makeHistoryState(value, true), "", window.location.href);
     history.pushState(makeHistoryState(value, false), "", window.location.href);
   }
@@ -110,6 +108,12 @@
     const notification = document.querySelector("#notificationBackdrop:not([hidden])");
     if (notification) {
       notification.querySelector('[data-notification-action="close"]')?.click();
+      return true;
+    }
+
+    const hdScreenModal = document.querySelector("#hdScreenEntryModal:not([hidden])");
+    if (hdScreenModal) {
+      hdScreenModal.querySelector("[data-hd-screen-close]")?.click();
       return true;
     }
 
@@ -229,8 +233,6 @@
     if (!ready || !appAvailable()) return;
 
     if (closeTopLayer()) {
-      // Le navigateur a déjà reculé d'une entrée. On remet l'écran courant au
-      // sommet pour que ce Retour ne serve qu'à fermer le panneau visible.
       consumeBackForLayer();
       return;
     }
@@ -239,8 +241,6 @@
     const isRoot = event.state?.[STATE_KEY]?.root === true;
     if (!target) return;
 
-    // L'entrée racine est invisible pour l'utilisateur. Si aucun écran interne
-    // ne doit être fermé et que l'on y revient, on poursuit le vrai Retour.
     if (isRoot && signature(target) === signature(snapshot())) {
       window.setTimeout(() => history.back(), 0);
       return;
@@ -279,8 +279,6 @@
 
     const next = event.target.closest?.(".article-wizard-next");
     if (next) {
-      // Avant de quitter l'étape courante, elle devient l'état exact de l'entrée
-      // actuelle. Après validation, la nouvelle étape sera ajoutée à l'historique.
       replaceCurrent(snapshot(), false);
       requestAnimationFrame(schedulePush);
       return;
