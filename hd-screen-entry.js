@@ -77,6 +77,7 @@
       .hd-screen-data { min-width:0; padding:11px 12px; border:1px solid var(--line); border-radius:13px; background:var(--surface); }
       .hd-screen-data small { display:block; margin-bottom:3px; color:var(--muted); font-weight:700; }
       .hd-screen-data strong { display:block; overflow-wrap:anywhere; }
+      .hd-screen-department-reason { grid-column:1 / -1; margin:0; padding:2px 3px 0; line-height:1.45; }
       .hd-screen-result-actions { display:flex; flex-wrap:wrap; gap:9px; }
       .hd-screen-filled-banner { margin:0 0 14px; padding:13px 14px; border:1px solid rgba(249,99,2,.38); border-radius:14px; background:rgba(249,99,2,.08); }
       .hd-screen-filled-banner strong { display:block; margin-bottom:3px; }
@@ -229,7 +230,7 @@
       currentPhoto = await compressImage(file);
       preview.src = currentPhoto;
       preview.hidden = false;
-      progress.textContent = "Lecture de l’écran Home Depot par l’IA…";
+      progress.textContent = "Lecture de la description et des données Home Depot…";
       currentResult = await apiAnalyze(currentPhoto);
       renderResult(currentResult);
       progress.hidden = true;
@@ -259,6 +260,10 @@
     const existing = existingItemForSku(sku);
     const recognized = Boolean(result?.isHomeDepotScreen && sku);
     const confidence = Math.round((Number(result?.screenConfidence) || 0) * 100);
+    const departmentConfidence = Math.round((Number(result?.departmentConfidence) || 0) * 100);
+    const departmentValue = result?.suggestedDepartment
+      ? `${result.suggestedDepartment} · ${departmentConfidence} %`
+      : "—";
 
     host.hidden = false;
     host.innerHTML = `
@@ -271,6 +276,7 @@
       <div class="hd-screen-data-grid">
         ${valueCard("SKU", sku)}
         ${valueCard("Description", result?.productName)}
+        ${valueCard("Département suggéré", departmentValue)}
         ${valueCard("Model #", result?.modelNumber)}
         ${valueCard("UPC #", result?.upc)}
         ${valueCard("Prix", result?.price ? `$${result.price}` : "")}
@@ -279,6 +285,7 @@
         ${valueCard("OHM+", result?.ohmPlus)}
         ${valueCard("Overhead", result?.overhead)}
         ${valueCard("X-Merch", result?.xMerch)}
+        ${result?.departmentReason ? `<p class="small muted hd-screen-department-reason"><strong>Pourquoi :</strong> ${escapeHTML(result.departmentReason)}</p>` : ""}
       </div>
       <div class="hd-screen-result-actions">
         <button class="button primary" type="button" data-hd-screen-use ${recognized ? "" : "disabled"}>${existing ? "Mettre à jour cet article" : "Préremplir le nouvel article"}</button>
