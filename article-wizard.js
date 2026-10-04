@@ -265,6 +265,28 @@
     return overlap >= KEYBOARD_THRESHOLD ? Math.round(overlap) : 0;
   }
 
+  function groupGuidedFields(grid) {
+    function group(title, fields, atEnd = false) {
+      if (fields.some(field => !field) || !fields.length) return;
+      const wrapper = document.createElement("div");
+      wrapper.className = "article-wizard-field-group";
+      const heading = document.createElement("div");
+      heading.className = "field-title";
+      heading.textContent = title;
+      if (atEnd) grid.append(wrapper);
+      else fields[0].before(wrapper);
+      wrapper.append(heading, ...fields);
+    }
+    group("Description et classement", ["name", "departmentId", "listId"].map(name =>
+      grid.querySelector(`[name="${name}"]`)?.closest("label")
+    ));
+    group("Détails complémentaires", [
+      grid.querySelector('[name="priority"]')?.closest("label"),
+      grid.querySelector(".stock-photo-field"),
+      grid.querySelector('[name="note"]')?.closest("label")
+    ], true);
+  }
+
   function initializeWizard(form) {
     if (!FORM_IDS.has(form.id)) return;
     moveGesFieldsToSalesLocation(form);
@@ -274,6 +296,7 @@
     const grid = form.querySelector(":scope > .form-grid");
     const finalActions = form.querySelector(":scope > .form-actions");
     if (!grid || !finalActions) return;
+    groupGuidedFields(grid);
 
     const steps = [...grid.children].filter(step =>
       !step.matches('input[type="hidden"], .ges-location-field')

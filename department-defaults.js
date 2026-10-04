@@ -54,7 +54,7 @@
       deletedDepartmentIds: [],
       deletedEmployeeIds: [],
       deletedPickupListIds: [],
-      settings: { storeName: "Mon magasin", keepPhotos: false },
+      settings: { storeName: "Mon magasin", keepPhotos: true },
       meta: { updatedAt: now, lastSyncAt: null, departmentDefaultsVersion: DEFAULTS_VERSION }
     };
   }

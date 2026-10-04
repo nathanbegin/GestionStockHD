@@ -435,3 +435,6 @@
     padding: 9px 10px;
   }
 }
+
+.article-wizard-field-group > label, .article-wizard-field-group > .stock-photo-field { display: block; margin-top: 18px; }
+.article-wizard-field-group > .stock-photo-field { padding-top: 12px; border-top: 1px solid var(--line); }

@@ -42,7 +42,7 @@ const defaultState = () => ({
   deletedDepartmentIds: [],
   deletedEmployeeIds: [],
   deletedPickupListIds: [],
-  settings: { storeName: "Mon magasin", keepPhotos: false },
+  settings: { storeName: "Mon magasin", keepPhotos: true },
   meta: { updatedAt: nowIso(), lastSyncAt: null }
 });
 
@@ -230,7 +230,7 @@ function sanitizeState(raw) {
     deletedDepartmentIds: [...deletedDepartmentIds],
     deletedEmployeeIds: [...deletedEmployeeIds],
     deletedPickupListIds: [...deletedPickupListIds],
-    settings: { storeName: String(source.settings?.storeName || "Mon magasin"), keepPhotos: Boolean(source.settings?.keepPhotos) },
+    settings: { storeName: String(source.settings?.storeName || "Mon magasin"), keepPhotos: source.settings?.keepPhotos !== false },
     meta: { updatedAt: source.meta?.updatedAt || nowIso(), lastSyncAt: source.meta?.lastSyncAt || null }
   };
 }
@@ -682,7 +682,7 @@ function renderScan() {
       ${scanDraft.photo ? `<div class="preview"><img src="${scanDraft.photo}" alt="Aperçu de l’étiquette"></div><div class="button-row top-gap"><button class="button primary" data-action="analyze-photo">Analyser l’étiquette</button><button class="button" data-action="clear-photo">Effacer</button></div>` : ""}
       ${scanDraft.confidence !== null ? `<div class="analysis-box"><div class="button-row"><span class="confidence">Confiance ${Math.round(scanDraft.confidence * 100)} %</span>${scanDraft.barcode ? `<span class="tag">Code-barres ${escapeHTML(scanDraft.barcode)}</span>` : ""}</div><p class="small muted">${escapeHTML(scanDraft.rawText || "Résultat extrait. Vérifie les champs ci-dessous.")}</p></div>` : ""}
     </div></section>
-    <section class="section"><div class="section-head"><div><h2>Résultat à confirmer</h2><p class="muted">Le numéro est conservé sous la forme 1001 123 456.</p></div></div><form id="scanForm" class="card"><div class="form-grid">${commonItemFields(draftItem)}<label class="full check-card"><span><input name="keepPhoto" type="checkbox" ${state.settings.keepPhotos ? "checked" : ""}> Conserver une miniature de la photo de l’étiquette</span></label></div><div class="form-actions"><button class="button primary" type="submit">Ajouter à la liste</button></div></form></section>`;
+    <section class="section"><div class="section-head"><div><h2>Résultat à confirmer</h2><p class="muted">Le numéro est conservé sous la forme 1001 123 456.</p></div></div><form id="scanForm" class="card"><div class="form-grid">${commonItemFields(draftItem)}</div><div class="form-actions"><button class="button primary" type="submit">Ajouter à la liste</button></div></form></section>`;
 }
 function searchableSku(value) { return String(value || "").replace(/\D/g, ""); }
 function filteredItems() {
@@ -1536,7 +1536,7 @@ els.appMain.addEventListener("submit", async event => {
     submit.textContent = stockPhotoDraft.dataUrl ? "Téléversement de la photo…" : "Enregistrement…";
     try {
       item = await applyStockPhotoChanges(item, existing);
-      if (form.id === "scanForm" && new FormData(form).get("keepPhoto") && scanDraft.photo) item.photo = scanDraft.photo;
+      if (form.id === "scanForm" && state.settings.keepPhotos && scanDraft.photo) item.photo = scanDraft.photo;
       upsertItem(item);
       const wasEdit = Boolean(editingId);
       editingId = null;

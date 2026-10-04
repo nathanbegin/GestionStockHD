@@ -244,7 +244,7 @@ function mergeSnapshots(local, cloud) {
     deletedPickupListIds: [...deletedPickupLists],
     settings: {
       storeName: String(settingsWinner?.storeName || "Mon magasin"),
-      keepPhotos: Boolean(settingsWinner?.keepPhotos)
+      keepPhotos: settingsWinner?.keepPhotos !== false
     },
     meta: {
       updatedAt: new Date().toISOString(),
