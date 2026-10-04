@@ -439,16 +439,12 @@
 .article-wizard-field-group > label, .article-wizard-field-group > .stock-photo-field { display: block; margin-top: 18px; }
 .article-wizard-field-group > .stock-photo-field { padding-top: 12px; border-top: 1px solid var(--line); }
 
-/* La dernière étape défile avec ses actions pour révéler toute la note. */
+/* Seuls les champs défilent; les actions restent visibles sous la zone. */
 @media (max-width: 699px) {
-  .app-shell:has(.article-wizard) .article-wizard.article-wizard-last-step {
+  .app-shell:has(.article-wizard) .article-wizard-last-step .form-grid {
     overflow-y: auto;
     overscroll-behavior: contain;
     scroll-padding-bottom: 24px;
-  }
-  .app-shell:has(.article-wizard) .article-wizard-last-step .form-grid {
-    flex: 0 0 auto;
-    overflow: visible;
   }
   .app-shell:has(.article-wizard) .article-wizard-last-step .article-wizard-step {
     height: auto;
@@ -456,6 +452,7 @@
     padding-bottom: 24px;
   }
   .article-wizard-last-step .article-wizard-header,
+  .article-wizard-last-step .article-wizard-controls,
   .article-wizard-last-step .article-wizard-final-actions {
     flex-shrink: 0;
   }

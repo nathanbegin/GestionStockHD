@@ -362,7 +362,7 @@
 
       if (Math.abs(movement) > 2) {
         const scrollHost = form.classList.contains("article-wizard-last-step") && window.matchMedia("(max-width: 699px)").matches
-          ? form
+          ? grid
           : field.closest(".article-wizard-step");
         if (scrollHost && scrollHost.scrollHeight > scrollHost.clientHeight) scrollHost.scrollBy({ top: movement, behavior });
         else window.scrollBy({ top: movement, behavior });
