@@ -360,7 +360,13 @@
       if (rect.bottom > visibleBottom) movement = rect.bottom - visibleBottom;
       else if (rect.top < visibleTop) movement = rect.top - visibleTop;
 
-      if (Math.abs(movement) > 2) window.scrollBy({ top: movement, behavior });
+      if (Math.abs(movement) > 2) {
+        const scrollHost = form.classList.contains("article-wizard-last-step") && window.matchMedia("(max-width: 699px)").matches
+          ? form
+          : field.closest(".article-wizard-step");
+        if (scrollHost && scrollHost.scrollHeight > scrollHost.clientHeight) scrollHost.scrollBy({ top: movement, behavior });
+        else window.scrollBy({ top: movement, behavior });
+      }
     }
 
     function scheduleVisibilityCheck(field = document.activeElement, delay = 240) {
@@ -374,6 +380,7 @@
 
     function showStep(index, { focus = false } = {}) {
       activeIndex = Math.max(0, Math.min(index, steps.length - 1));
+      form.classList.toggle("article-wizard-last-step", activeIndex === steps.length - 1);
       steps.forEach((step, stepIndex) => {
         const active = stepIndex === activeIndex;
         step.hidden = !active;

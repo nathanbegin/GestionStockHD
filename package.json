@@ -1,6 +1,6 @@
 {
   "name": "remplissage-magasin",
-  "version": "5.0.91",
+  "version": "5.0.92",
   "private": true,
   "type": "module",
   "scripts": {
