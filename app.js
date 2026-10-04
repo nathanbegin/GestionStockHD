@@ -109,7 +109,7 @@ const els = {
   importInput: document.querySelector("#importInput")
 };
 
-function emptyScanDraft() { return { photo: null, sku: "", name: "", confidence: null, rawText: "", barcode: "" }; }
+function emptyScanDraft() { return { photo: null, sku: "", name: "", departmentId: "", confidence: null, rawText: "", barcode: "" }; }
 function emptyStockPhotoDraft() { return { dataUrl: null, remove: false, existingPath: "" }; }
 function normalizeName(value) {
   return String(value || "").trim().replace(/\s+/g, " ").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
@@ -676,7 +676,7 @@ function renderManual() {
   return `<section class="section"><div class="section-head"><div><h2>${item ? "Modifier l’article" : "Nouvel article"}</h2><p class="muted">Saisie manuelle, attribution et photo de l’emplacement.</p></div></div>${itemForm(item || {})}</section>`;
 }
 function renderScan() {
-  const draftItem = { sku: scanDraft.sku, name: scanDraft.name, quantity: 1, priority: "medium", assignedEmployeeIds: [] };
+  const draftItem = { sku: scanDraft.sku, name: scanDraft.name, departmentId: scanDraft.departmentId, quantity: 1, priority: "medium", assignedEmployeeIds: [] };
   return `<section class="section"><div class="section-head"><div><h2>Lire une étiquette</h2><p class="muted">Prends une nouvelle photo ou sélectionne une image déjà enregistrée.</p></div></div>
     <div class="card"><div class="scan-zone"><span class="scan-icon">▣</span><strong>${scanDraft.photo ? "Remplacer la photo" : "Ajouter une photo d’étiquette"}</strong><span class="small muted">Les deux options sont disponibles dans la PWA.</span><div class="photo-choice-grid"><label class="button primary photo-choice" for="cameraInput">📷 Prendre une photo</label><label class="button photo-choice" for="galleryInput">🖼 Choisir une photo existante</label></div><input id="cameraInput" type="file" accept="image/*" capture="environment"><input id="galleryInput" type="file" accept="image/*"></div>
       ${scanDraft.photo ? `<div class="preview"><img src="${scanDraft.photo}" alt="Aperçu de l’étiquette"></div><div class="button-row top-gap"><button class="button primary" data-action="analyze-photo">Analyser l’étiquette</button><button class="button" data-action="clear-photo">Effacer</button></div>` : ""}
@@ -1157,6 +1157,7 @@ async function handleLabelPhoto(file) {
   try {
     scanDraft.photo = await compressImage(file, 1280, .75);
     scanDraft.confidence = null;
+    scanDraft.departmentId = "";
     scanDraft.rawText = "";
     render();
     if ("BarcodeDetector" in window) {
@@ -1232,15 +1233,22 @@ function compressImage(file, maxSize, quality) {
     reader.readAsDataURL(file);
   });
 }
+function analyzedDepartmentId(data, departments = state.departments) {
+  const confidence = Number(data?.departmentConfidence);
+  if (!Number.isFinite(confidence) || confidence < 0.35) return "";
+  const name = normalizeName(data?.suggestedDepartment);
+  return name ? departments.find(entry => normalizeName(entry.name) === name)?.id || "" : "";
+}
 async function analyzePhoto(btn) {
   if (!scanDraft.photo) return toast("Ajoute d’abord une photo");
   btn.disabled = true;
   btn.textContent = "Analyse…";
   try {
-    const data = await apiRequest("/api/analyze", { method: "POST", body: { image: scanDraft.photo } });
+    const data = await apiRequest("/api/analyze", { method: "POST", body: { image: scanDraft.photo, departments: state.departments.map(entry => entry.name) } });
     const detectedSku = normalizeRequiredSku(data.sku) || normalizeRequiredSku(data.visibleText) || normalizeRequiredSku(data.summary);
     scanDraft.sku = detectedSku || scanDraft.sku;
     scanDraft.name = data.productName || scanDraft.name;
+    scanDraft.departmentId = analyzedDepartmentId(data);
     scanDraft.barcode = data.barcode || scanDraft.barcode;
     scanDraft.confidence = typeof data.confidence === "number" ? data.confidence : .5;
     scanDraft.rawText = data.summary || data.visibleText || "Étiquette analysée";
@@ -1593,6 +1601,7 @@ els.appMain.addEventListener("change", async event => {
     if (target.checked) visible.forEach(item => selectedIds.add(item.id)); else visible.forEach(item => selectedIds.delete(item.id));
     render();
   }
+  if (target.matches('#scanForm [name="departmentId"]')) scanDraft.departmentId = target.value;
   const filterMap = { filterList: "listId", filterDepartment: "departmentId", filterEmployee: "employeeId", filterStatus: "status", filterPriority: "priority" };
   if (filterMap[target.id]) { filters[filterMap[target.id]] = target.value; render(); }
   if (target.id === "assignmentFilter") { assignmentFilter = target.value; selectedIds.clear(); render(); }
