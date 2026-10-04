@@ -515,3 +515,7 @@ details summary { cursor: pointer; color: var(--brand-2); font-weight: 750; }
     display: none;
   }
 }
+
+/* Quantités avec unité visibles dans les articles et les tournées. */
+.item-qty.item-qty-with-unit { width: auto; min-width: 48px; max-width: 110px; height: auto; min-height: 48px; padding: 8px; font-size: 14px; line-height: 1.2; text-align: center; overflow-wrap: anywhere; }
+.quantity-unit-caption { display: block; margin-top: 12px; font-size: 14px; font-weight: 600; }

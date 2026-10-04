@@ -3,6 +3,10 @@ const CLIENT_ID_KEY = "restock_client_id_v1";
 const PENDING_STATUS_KEY = "restock_pending_status_v1";
 const STATUSES = ["a_remplir", "recupere", "rempli", "introuvable"];
 const STATUS_LABELS = { a_remplir: "À remplir", recupere: "Récupéré", rempli: "Rempli", introuvable: "Introuvable" };
+const QUANTITY_UNITS = { unit: ["unité", "unités"], pallet: ["palette", "palettes"], bundle: ["bundle (bois)", "bundles (bois)"] };
+function quantityUnit(value) { return Object.hasOwn(QUANTITY_UNITS, value) ? value : "unit"; }
+function quantityLabel(item) { const count = Number(item.quantity) || 1; return `${count} ${QUANTITY_UNITS[quantityUnit(item.quantityUnit)][count === 1 ? 0 : 1]}`; }
+function quantityUnitOptions(value = "unit") { return Object.entries(QUANTITY_UNITS).map(([key, labels]) => `<option value="${key}" ${quantityUnit(value) === key ? "selected" : ""}>${labels[1]}</option>`).join(""); }
 const PRIORITY_LABELS = { high: "Élevée", medium: "Normale", low: "Faible" };
 const ROLE_LABELS = { employee: "Employé", supervisor: "Superviseur", admin: "Administrateur" };
 const APPROVAL_LABELS = { pending: "En attente", approved: "Approuvé", rejected: "Refusé" };
@@ -187,6 +191,7 @@ function sanitizeState(raw) {
     items.push({
       ...rawItem,
       sku: formatSku(rawItem.sku),
+      quantityUnit: quantityUnit(rawItem.quantityUnit),
       listId: listsResult.idMap.get(rawItem.listId) || listFallback,
       departmentId: departmentsResult.idMap.get(rawItem.departmentId) || departmentFallback,
       assignedEmployeeIds: [...new Set((rawItem.assignedEmployeeIds || []).map(id => employeesResult.idMap.get(id) || id).filter(id => employeeIds.has(id)))],
@@ -652,7 +657,7 @@ function commonItemFields(item = {}) {
     <label>Description<input name="name" maxlength="140" value="${escapeHTML(item.name || "")}" placeholder="Ex. Perceuse sans fil 20 V"></label>
     <label>Liste source<select name="listId" required>${options(state.lists, listId)}</select></label>
     <label>Département<select name="departmentId" required>${options(state.departments, departmentId)}</select></label>
-    <label>Quantité à remplir<input name="quantity" type="number" inputmode="numeric" min="1" max="999" required value="${Number(item.quantity) || 1}"></label>
+    <label>Quantité à remplir<input name="quantity" type="number" inputmode="numeric" min="1" max="999" required value="${Number(item.quantity) || 1}"><span class="quantity-unit-caption">Unité de quantité</span><select name="quantityUnit" aria-label="Unité de quantité">${quantityUnitOptions(item.quantityUnit)}</select></label>
     <label>Priorité<select name="priority"><option value="high" ${item.priority === "high" ? "selected" : ""}>Élevée</option><option value="medium" ${!item.priority || item.priority === "medium" ? "selected" : ""}>Normale</option><option value="low" ${item.priority === "low" ? "selected" : ""}>Faible</option></select></label>
     ${locationBarcodeField("salesLocation", "Emplacement en tablette", item.salesLocation || "", "Allée 12, section B, tablette 3")}
     ${locationBarcodeField("stockLocation", "Lieu du ramassage", item.stockLocation || "", "Entrepôt R4, niveau 2 ou cour zone B")}
@@ -747,7 +752,7 @@ function renderItemCard(item, { selectable = true, compact = false } = {}) {
   const selected = selectedIds.has(item.id);
   return `<article class="card item-card ${selected ? "selected" : ""} ${compact ? "compact-item-card" : ""}">
     ${selectable ? `<label class="item-select"><input class="select-item" type="checkbox" data-id="${item.id}" ${selected ? "checked" : ""}> Sélectionner</label>` : ""}
-    <div class="item-top"><div class="item-title"><div class="item-qty">${Number(item.quantity) || 1}</div><div><h3>${escapeHTML(item.name || "Article sans description")}</h3><p class="sku">${escapeHTML(formatSku(item.sku))}</p></div></div><button class="status-button" data-action="cycle-status" data-id="${item.id}" data-status="${item.status}">${STATUS_LABELS[item.status]}</button></div>
+    <div class="item-top"><div class="item-title"><div class="item-qty item-qty-with-unit">${escapeHTML(quantityLabel(item))}</div><div><h3>${escapeHTML(item.name || "Article sans description")}</h3><p class="sku">${escapeHTML(formatSku(item.sku))}</p></div></div><button class="status-button" data-action="cycle-status" data-id="${item.id}" data-status="${item.status}">${STATUS_LABELS[item.status]}</button></div>
     <div class="tags"><span class="tag">${escapeHTML(listName(item.listId))}</span><span class="tag">${escapeHTML(departmentName(item.departmentId))}</span><span class="tag ${item.priority}">${PRIORITY_LABELS[item.priority]}</span>${renderAssignmentTags(item)}<span class="tag">Par ${escapeHTML(item.updatedBy || item.createdBy || "—")}</span></div>
     <div class="location-grid"><div><strong>Tablette</strong>${escapeHTML(item.salesLocation || "Non précisé")}</div><div><strong>Lieu du ramassage</strong>${escapeHTML(item.stockLocation || "Non précisé")}</div></div>
     ${compact ? "" : renderStockPhoto(item)}
@@ -764,6 +769,7 @@ function renderBulkEditDialog() {
     <div class="bulk-field"><label class="check-label"><input type="checkbox" name="applyForklift"> Modifier l’exigence de lift</label><label class="check-label"><input type="checkbox" name="requiresForklift"> Nécessite un chariot élévateur</label></div>
     <div class="bulk-field"><label class="check-label"><input type="checkbox" name="applyPriority"> Modifier la priorité</label><select name="priority"><option value="high">Élevée</option><option value="medium" selected>Normale</option><option value="low">Faible</option></select></div>
     <div class="bulk-field"><label class="check-label"><input type="checkbox" name="applyQuantity"> Modifier la quantité</label><input name="quantity" type="number" min="1" max="999" value="1"></div>
+    <div class="bulk-field"><label class="check-label"><input type="checkbox" name="applyQuantityUnit"> Modifier l’unité de quantité</label><select name="quantityUnit" aria-label="Unité de quantité">${quantityUnitOptions()}</select></div>
     <div class="bulk-field"><label class="check-label"><input type="checkbox" name="applySalesLocation"> Modifier l’emplacement tablette</label><input name="salesLocation"></div>
     <div class="bulk-field"><label class="check-label"><input type="checkbox" name="applyStockLocation"> Modifier le lieu du ramassage</label><input name="stockLocation"></div>
     <div class="bulk-field"><label class="check-label"><input type="checkbox" name="applyNote"> Remplacer la note</label><textarea name="note"></textarea></div>
@@ -842,7 +848,7 @@ function renderTour() {
   const employees = assignedEmployees(item);
   const validLift = employees.some(isLiftPermitValid);
   return `<section class="section">${pickup ? `<div class="tour-context card"><div><p class="eyebrow">LISTE PERSONNALISÉE</p><strong>${escapeHTML(pickup.name)}</strong><span>${escapeHTML(pickup.pickupLocation || "Point de départ non précisé")}</span></div><button class="button compact" data-action="exit-pickup-tour">Quitter</button></div>` : ""}<article class="card tour-card">
-    <div class="section-head"><div><p class="tour-number">Article ${tourIndex + 1} sur ${items.length}</p><h2>${escapeHTML(item.name || "Article sans description")}</h2><p class="sku">${escapeHTML(formatSku(item.sku))}</p></div><div class="item-qty">${item.quantity}</div></div>
+    <div class="section-head"><div><p class="tour-number">Article ${tourIndex + 1} sur ${items.length}</p><h2>${escapeHTML(item.name || "Article sans description")}</h2><p class="sku">${escapeHTML(formatSku(item.sku))}</p></div><div class="item-qty item-qty-with-unit">${escapeHTML(quantityLabel(item))}</div></div>
     <div class="tour-progress"><span style="width:${pct}%"></span></div>
     <div class="tags"><span class="tag">${escapeHTML(departmentName(item.departmentId))}</span><span class="tag ${item.priority}">${PRIORITY_LABELS[item.priority]}</span>${renderAssignmentTags(item)}</div>
     ${item.requiresForklift && !validLift ? `<div class="safety-warning"><strong>Permis à vérifier</strong><span>Aucun employé assigné ne possède actuellement un permis de chariot élévateur valide dans l’application.</span></div>` : ""}
@@ -945,6 +951,7 @@ function formToItem(form, existing = {}) {
     listId: String(data.get("listId") || state.lists[0]?.id || ""),
     departmentId: String(data.get("departmentId") || state.departments[0]?.id || ""),
     quantity: Math.max(1, Number(data.get("quantity") || 1)),
+    quantityUnit: quantityUnit(data.get("quantityUnit")),
     priority: String(data.get("priority") || "medium"),
     salesLocation: String(data.get("salesLocation") || "").trim(),
     stockLocation: String(data.get("stockLocation") || "").trim(),
@@ -1034,6 +1041,7 @@ function applyBulkEdit(form) {
     if (applyForklift) item.requiresForklift = newRequiresForklift;
     if (data.get("applyPriority")) item.priority = String(data.get("priority") || item.priority);
     if (data.get("applyQuantity")) item.quantity = Math.max(1, Number(data.get("quantity") || 1));
+    if (data.get("applyQuantityUnit")) item.quantityUnit = quantityUnit(data.get("quantityUnit"));
     if (data.get("applySalesLocation")) item.salesLocation = String(data.get("salesLocation") || "").trim();
     if (data.get("applyStockLocation")) item.stockLocation = String(data.get("stockLocation") || "").trim();
     if (data.get("applyNote")) item.note = String(data.get("note") || "").trim();
@@ -1417,10 +1425,10 @@ function downloadBlob(content, type, filename) {
 function exportJSON() { downloadBlob(JSON.stringify(state, null, 2), "application/json", `remplissage-${new Date().toISOString().slice(0, 10)}.json`); }
 function csvCell(value) { return `"${String(value ?? "").replaceAll('"', '""')}"`; }
 function exportCSV() {
-  const headers = ["SKU", "Description", "Liste", "Département", "Quantité", "Priorité", "Statut", "Assigné à", "Lift requis", "Permis valide assigné", "Emplacement tablette", "Lieu du ramassage", "Photo emplacement", "Note", "Mis à jour par", "Date"];
+  const headers = ["SKU", "Description", "Liste", "Département", "Quantité", "Unité de quantité", "Priorité", "Statut", "Assigné à", "Lift requis", "Permis valide assigné", "Emplacement tablette", "Lieu du ramassage", "Photo emplacement", "Note", "Mis à jour par", "Date"];
   const rows = state.items.map(item => {
     const employees = assignedEmployees(item);
-    return [formatSku(item.sku), item.name, listName(item.listId), departmentName(item.departmentId), item.quantity, PRIORITY_LABELS[item.priority], STATUS_LABELS[item.status], employees.map(x => x.name).join("; "), item.requiresForklift ? "Oui" : "Non", item.requiresForklift ? (employees.some(isLiftPermitValid) ? "Oui" : "Non") : "Sans objet", item.salesLocation, item.stockLocation, item.stockPhotoPath ? "Oui" : "Non", item.note, item.updatedBy, item.updatedAt];
+    return [formatSku(item.sku), item.name, listName(item.listId), departmentName(item.departmentId), item.quantity, QUANTITY_UNITS[quantityUnit(item.quantityUnit)][1], PRIORITY_LABELS[item.priority], STATUS_LABELS[item.status], employees.map(x => x.name).join("; "), item.requiresForklift ? "Oui" : "Non", item.requiresForklift ? (employees.some(isLiftPermitValid) ? "Oui" : "Non") : "Sans objet", item.salesLocation, item.stockLocation, item.stockPhotoPath ? "Oui" : "Non", item.note, item.updatedBy, item.updatedAt];
   });
   downloadBlob("\ufeff" + [headers, ...rows].map(row => row.map(csvCell).join(",")).join("\n"), "text/csv;charset=utf-8", `remplissage-${new Date().toISOString().slice(0, 10)}.csv`);
 }
