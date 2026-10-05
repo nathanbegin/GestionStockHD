@@ -187,6 +187,11 @@
       const panel = batchSection.querySelector(".card");
       if (panel) { panel.classList.add("sku-ai-batch-panel"); fieldLabel.prepend(panel); }
       batchSection.remove();
+      requestAnimationFrame(() => {
+        const carousel = panel?.querySelector(".batch-carousel");
+        const active = carousel?.querySelector(".batch-thumbnail.active");
+        if (active && carousel.firstElementChild) carousel.scrollLeft = active.offsetLeft - carousel.firstElementChild.offsetLeft;
+      });
     }
     movePhotoFeedback(sourceSection, fieldLabel);
     form.closest(".section")?.classList.add("sku-ai-result-section");

@@ -227,3 +227,45 @@
 @media (max-width: 900px) {
   .article-entry-options-grid.unified-article-entry-grid { grid-template-columns: 1fr; }
 }
+
+/* La première étape défile sans déplacer les commandes Précédent/Suivant. */
+@media (max-width: 699px) {
+  .app-shell:has(.article-wizard) .article-wizard .form-grid:has(> .sku-ai-label:not([hidden])) {
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scroll-padding-bottom: 24px;
+  }
+  .app-shell:has(.article-wizard) .article-wizard .sku-ai-label.article-wizard-step {
+    height: auto;
+    overflow: visible;
+    padding-bottom: 24px;
+  }
+}
+.sku-ai-batch-panel { padding: 14px; }
+.sku-ai-batch-panel h2 { margin: 0 0 8px; font-size: 20px; }
+.batch-carousel {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  max-width: 100%;
+  padding: 4px 2px 10px;
+  scroll-snap-type: x proximity;
+}
+.batch-thumbnail {
+  flex: 0 0 128px;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 6px;
+  border: 2px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+  color: var(--text);
+  scroll-snap-align: start;
+}
+.batch-thumbnail.active { border-color: var(--brand, #f96302); background: rgba(249,99,2,.08); }
+.batch-thumbnail img { width: 112px; height: 78px; object-fit: contain; border-radius: 6px; background: #f4f1ee; }
+.batch-thumbnail > span { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
+.batch-thumbnail:disabled { opacity: .65; }
+.batch-thumbnail-missing { display: grid; place-items: center; height: 78px; }

@@ -211,6 +211,8 @@
   }
 
   function questionTitle(step, index) {
+    if (step.querySelector('[name="salesLocation"]')) return "Emplacement en tablette";
+    if (step.querySelector('[name="stockLocation"]')) return "Lieu du ramassage";
     const fieldTitle = step.querySelector(":scope > .field-title, :scope > span > .field-title");
     if (fieldTitle?.textContent.trim()) return fieldTitle.textContent.trim();
 

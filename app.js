@@ -751,7 +751,7 @@ function renderLabelBatch() {
   const completed = batch.entries.filter(entry => entry.saved).length;
   return `<section class="section" data-label-batch-section><div class="card"><h2>Lot d’étiquettes</h2>
     <p class="muted" id="batchProgress">${batch.busy ? batch.progress : `${completed} ajouté(s) sur ${batch.entries.length} · ${batch.calls}/25 appels IA`}</p>
-    ${batch.busy ? "" : `<div class="button-row">${batch.entries.map((entry, index) => `<button type="button" class="button compact" data-action="batch-open" data-index="${index}" ${entry.saved ? "disabled" : ""}>${index + 1}${entry.saved ? " ✓" : entry.error ? " ⚠" : ""}</button>`).join("")}</div><p class="small muted">Choisis une photo pour compléter les champs. Les articles sont enregistrés un à un. Ce lot reste disponible pendant cette session.</p><button class="button" data-action="batch-end">Terminer le lot</button>`}
+    ${batch.busy ? "" : `<div class="batch-carousel" role="group" aria-label="Étiquettes du lot">${batch.entries.map((entry, index) => `<button type="button" class="batch-thumbnail ${index === batch.index ? "active" : ""}" data-action="batch-open" data-index="${index}" aria-label="Étiquette ${index + 1}${entry.saved ? ", ajoutée" : ""}" aria-pressed="${index === batch.index}" ${entry.saved ? "disabled" : ""}>${entry.thumbnail || entry.draft.photo ? `<img src="${entry.thumbnail || entry.draft.photo}" alt="Étiquette ${index + 1}">` : `<span class="batch-thumbnail-missing">Photo indisponible</span>`}<span>${entry.saved ? "✓ Ajouté" : entry.error ? "⚠ À vérifier" : escapeHTML(entry.fields.sku || entry.draft.sku || "À compléter")}</span></button>`).join("")}</div><p class="small muted">Fais défiler les miniatures et sélectionne une étiquette à compléter.</p><button type="button" class="button compact" data-action="batch-end">Terminer le lot</button>`}
   </div></section>`;
 }
 function rememberBatchForm() {
@@ -788,6 +788,7 @@ async function startLabelBatch(files) {
     if (progress) progress.textContent = batch.progress;
     try {
       entry.draft.photo = await compressImage(files[index], 1280, .75);
+      entry.thumbnail = await compressImage(files[index], 240, .65);
       batch.calls++;
       const data = await apiRequest("/api/analyze", { method: "POST", body: { image: entry.draft.photo, departments: state.departments.map(entry => entry.name) } });
       Object.assign(entry.draft, {
