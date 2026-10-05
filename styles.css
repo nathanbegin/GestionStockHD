@@ -535,3 +535,13 @@ details summary { cursor: pointer; color: var(--brand-2); font-weight: 750; }
 .console-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
 .console-quota progress { display: block; width: 100%; height: 14px; accent-color: var(--brand, #f96302); }
 @media (max-width: 699px) { .console-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* La console utilise toute la largeur disponible sur ordinateur. */
+@media (min-width: 980px) {
+  .main-content:has(> .admin-console) {
+    width: 100%;
+    max-width: none;
+    margin-left: 0;
+    margin-right: 0;
+  }
+}
