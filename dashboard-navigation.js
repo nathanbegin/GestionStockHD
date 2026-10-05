@@ -19,6 +19,7 @@
     "Plus": "more",
     "Historique": "history",
     "Utilisateurs": "users",
+    "Permis de lift": "lift-permits",
     "Réglages": "settings"
   };
 
@@ -234,7 +235,7 @@
     if (route === "high") return openArticleList({ priority: "high" });
     if (route === "mine") return openAssignments("mine");
     if (route === "unassigned") return openAssignments("unassigned");
-    if (route === "lift") return openAssignments("lift");
+    if (route === "lift") return navigateTo("lift-permits");
   }
 
   document.addEventListener("click", event => {

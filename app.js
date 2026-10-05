@@ -479,7 +479,7 @@ async function refreshUserDirectory({ silent = false } = {}) {
     const data = await apiRequest("/api/users");
     userDirectory = Array.isArray(data.users) ? data.users : [];
     mergeDirectoryIntoEmployees();
-    if (!silent && ["users", "assignments", "pickups"].includes(currentView)) render();
+    if (!silent && ["users", "lift-permits", "assignments", "pickups"].includes(currentView)) render();
   } catch (error) {
     if (!silent) toast(error.message);
   }
@@ -544,7 +544,7 @@ function setView(view) {
     editingPickupListId = null;
     pickupDraftItemIds = [];
   }
-  document.querySelectorAll("[data-nav]").forEach(btn => btn.classList.toggle("active", btn.dataset.nav === view || (btn.dataset.nav === "more" && ["history", "users", "settings"].includes(view))));
+  document.querySelectorAll("[data-nav]").forEach(btn => btn.classList.toggle("active", btn.dataset.nav === view || (btn.dataset.nav === "more" && ["history", "users", "lift-permits", "settings"].includes(view))));
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (remoteUpdatePending) {
@@ -616,6 +616,7 @@ function render({ soft = false } = {}) {
     more: "Plus",
     history: "Historique",
     users: "Utilisateurs",
+    "lift-permits": "Permis de lift",
     settings: "Réglages"
   };
   els.pageTitle.textContent = titles[currentView] || "Remplissage";
@@ -631,6 +632,7 @@ function render({ soft = false } = {}) {
     more: renderMore,
     history: renderHistory,
     users: renderUsers,
+    "lift-permits": renderLiftPermits,
     settings: renderSettings
   }[currentView] || renderDashboard;
   const html = renderer();
@@ -664,7 +666,7 @@ function renderDashboard() {
   const high = open.filter(x => x.priority === "high").length;
   const mine = open.filter(x => (x.assignedEmployeeIds || []).includes(currentEmployeeId())).length;
   const unassigned = open.filter(x => !(x.assignedEmployeeIds || []).length).length;
-  const liftWarnings = open.filter(x => x.requiresForklift && !assignedEmployees(x).some(isLiftPermitValid)).length;
+  const liftWarnings = userDirectory.map(normalizeProfile).filter(user => user.approvalStatus === "approved" && liftPermitNeedsReview(user)).length;
   const recent = [...state.history].slice(0, 5);
   return `
     <section class="section">
@@ -1039,6 +1041,16 @@ function normalizeProfile(profile) {
     createdAt: profile.createdAt || profile.created_at || "",
     updatedAt: profile.updatedAt || profile.updated_at || ""
   };
+}
+function liftPermitNeedsReview(user) {
+  return user.hasLiftPermit && (!isLiftPermitValid(user) || !user.liftPermitNumber || !user.liftPermitExpiresAt);
+}
+function renderLiftPermits() {
+  if (!canManageUsers()) return `<section class="section">${renderEmpty("Accès réservé", "Seuls les superviseurs et administrateurs peuvent consulter les permis.")}</section>`;
+  const users = userDirectory.map(normalizeProfile).filter(user => user.approvalStatus === "approved")
+    .sort((a, b) => Number(liftPermitNeedsReview(b)) - Number(liftPermitNeedsReview(a)) || a.fullName.localeCompare(b.fullName, "fr-CA"));
+  return `<section class="section"><div class="section-head"><div><h2>Permis de lift</h2><p class="muted">Statut, numéro et expiration. Les permis expirés ou incomplets apparaissent en premier.</p></div><button class="button" data-action="refresh-users">Actualiser</button></div>
+    ${users.length ? `<div class="user-grid">${users.map(user => `<article class="card"><h3>${escapeHTML(user.fullName)}</h3><p class="small ${liftPermitNeedsReview(user) ? "permit-bad" : "muted"}">${escapeHTML(liftPermitLabel(user))}${liftPermitNeedsReview(user) ? " · À vérifier" : ""}</p><form class="lift-permit-form" data-user-id="${escapeHTML(user.id)}"><label class="check-card"><span><input type="checkbox" name="hasLiftPermit" ${user.hasLiftPermit ? "checked" : ""}> Possède un permis de lift</span></label><label>Numéro de permis<input name="liftPermitNumber" maxlength="80" value="${escapeHTML(user.liftPermitNumber)}"></label><label>Date d’expiration<input type="date" name="liftPermitExpiresAt" value="${escapeHTML(user.liftPermitExpiresAt)}"></label><div class="form-actions"><button class="button primary" type="submit">Enregistrer le permis</button></div></form></article>`).join("")}</div>` : renderEmpty("Aucun employé approuvé", "Les permis apparaîtront ici après l’approbation des comptes.")}</section>`;
 }
 function renderUsers() {
   if (!canManageUsers()) return `<section class="section">${renderEmpty("Accès réservé", "Seuls les superviseurs et administrateurs peuvent gérer les utilisateurs.")}</section>`;
@@ -1731,6 +1743,18 @@ els.appMain.addEventListener("submit", async event => {
   if (form.id === "bulkEditForm") return applyBulkEdit(form);
   if (form.id === "assignmentForm") return applyAssignments(form);
   if (form.id === "pickupListForm") return savePickupList(form);
+  if (form.classList.contains("lift-permit-form")) {
+    if (!canManageUsers()) return;
+    const data = new FormData(form);
+    const user = userDirectory.map(normalizeProfile).find(user => user.id === form.dataset.userId);
+    if (!user) return toast("Actualise la liste des permis");
+    formDirty = false;
+    return updateUser("update", user.id, {
+      fullName: user.fullName, role: user.role, approvalStatus: user.approvalStatus,
+      hasLiftPermit: Boolean(data.get("hasLiftPermit")),
+      liftPermitNumber: data.get("liftPermitNumber"), liftPermitExpiresAt: data.get("liftPermitExpiresAt") || null
+    });
+  }
   if (form.classList.contains("user-edit-form")) {
     const data = new FormData(form);
     return updateUser("update", form.dataset.userId, {

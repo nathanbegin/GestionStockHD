@@ -10,6 +10,7 @@
     ["Plus", "more"],
     ["Historique", "history"],
     ["Utilisateurs", "users"],
+    ["Permis de lift", "lift-permits"],
     ["Réglages", "settings"],
     ["Photo", "scan"],
     ["Ajouter un article", "scan"],
