@@ -24,6 +24,10 @@ const schema = {
   type: "object",
   additionalProperties: false,
   properties: {
+    isHomeDepotScreen: { type: "boolean" },
+    aisleBay: { type: ["string", "null"] },
+    ohmPlus: { type: ["string", "null"] },
+    overhead: { type: ["string", "null"] },
     sku: { type: ["string", "null"] },
     barcode: { type: ["string", "null"] },
     productName: { type: ["string", "null"] },
@@ -36,6 +40,7 @@ const schema = {
     departmentReason: { type: ["string", "null"] }
   },
   required: [
+    "isHomeDepotScreen", "aisleBay", "ohmPlus", "overhead",
     "sku",
     "barcode",
     "productName",
@@ -217,7 +222,7 @@ export default async function handler(request, response) {
         content: [
           {
             type: "input_text",
-            text: `Analyse cette étiquette de magasin. Commence par rechercher attentivement le code de département R## sous le code-barres, à droite de l’étiquette. Cet emplacement est fréquent, mais pas garanti : si aucun code reconnu n’y est lisible, inspecte toutes les autres zones de l’image, même si le code est petit ou séparé par des espaces. Le numéro d’article interne contient exactement 10 chiffres, commence par 1000 ou 1001, et peut être imprimé comme 1001-123456, 1001123456 ou 1001 123 456. Extrais ce numéro dans le champ sku et retourne-le au format 1001 123 456. Ne confonds pas le SKU avec le prix ou un autre code-barres. Extrais uniquement les informations réellement visibles. N’invente rien. Si un champ est illisible, retourne null. ${departmentInstruction} Réponds selon le schéma JSON demandé.`
+            text: `Analyse cette photo de magasin : elle peut montrer une étiquette OU l'écran ArticleLookup / Article Lookup d'un terminal Zebra Home Depot. Identifie le type dans isHomeDepotScreen. La coque ZEBRA, les reflets, les bordures noires et la barre Android ne disqualifient jamais l'écran : lis la zone de l'application. ArticleLookup, Stock / Details / Analytics, Model#, UPC#, Active, On Hand, Aisle - Bay et OHM+ sont des indices caractéristiques, même partiellement visibles. Pour un écran, extrais le SKU affiché à droite de l'image produit, la description sous le produit au-dessus du prix, aisleBay depuis Aisle - Bay, ohmPlus depuis OHM+ et overhead depuis Overhead. Ne confonds pas les quantités On Hand/Pack avec les emplacements. N/A signifie null. Le nom peut être en anglais et doit être transcrit tel quel. Pour une étiquette, isHomeDepotScreen vaut false et les trois emplacements valent null. Pour une étiquette, commence par rechercher attentivement le code de département R## sous le code-barres, à droite de l’étiquette. Cet emplacement est fréquent, mais pas garanti : si aucun code reconnu n’y est lisible, inspecte toutes les autres zones de l’image, même si le code est petit ou séparé par des espaces. Le numéro d’article interne contient exactement 10 chiffres, commence par 1000 ou 1001, et peut être imprimé comme 1001-123456, 1001123456 ou 1001 123 456. Extrais ce numéro dans le champ sku et retourne-le au format 1001 123 456. Ne confonds pas le SKU avec le prix ou un autre code-barres. Extrais uniquement les informations réellement visibles. N’invente rien. Si un champ est illisible, retourne null. ${departmentInstruction} Réponds selon le schéma JSON demandé.`
           },
           { type: "input_image", image_url: image, detail: "high" }
         ]

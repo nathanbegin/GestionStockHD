@@ -773,6 +773,16 @@ function openBatchEntry(index) {
   stockPhotoDraft = entry.stockPhoto || emptyStockPhotoDraft();
   render();
 }
+function screenDraftFields(data) {
+  if (!data.isHomeDepotScreen) return {};
+  const location = value => {
+    const text = String(value || "").trim();
+    return /^(?:n\/?a|null|none|—|-)$/i.test(text) ? "" : text.slice(0, 120);
+  };
+  const aisleBay = location(data.aisleBay), ohmPlus = location(data.ohmPlus), overhead = location(data.overhead);
+  const lines = ["[ÉCRAN HOME DEPOT]", ohmPlus ? `OHM+ : ${ohmPlus}` : "", overhead ? `Overhead : ${overhead}` : ""].filter(Boolean);
+  return { salesLocation: aisleBay, note: lines.join("\n") };
+}
 async function startLabelBatch(files) {
   if (labelBatch) return toast("Termine le lot actuel avant d’en commencer un autre");
   if (!files.length || files.length > MAX_BATCH_PHOTOS) return toast("Choisis entre 1 et 25 photos maximum");
@@ -792,6 +802,7 @@ async function startLabelBatch(files) {
       batch.calls++;
       const data = await apiRequest("/api/analyze", { method: "POST", body: { image: entry.draft.photo, departments: state.departments.map(entry => entry.name) } });
       Object.assign(entry.draft, {
+        ...screenDraftFields(data),
         sku: normalizeRequiredSku(data.sku) || normalizeRequiredSku(data.visibleText) || normalizeRequiredSku(data.summary) || "",
         name: data.productName || "", departmentId: analyzedDepartmentId(data), barcode: data.barcode || "",
         confidence: typeof data.confidence === "number" ? data.confidence : .5,
@@ -1386,13 +1397,14 @@ async function analyzePhoto(btn) {
   try {
     const data = await apiRequest("/api/analyze", { method: "POST", body: { image: scanDraft.photo, departments: state.departments.map(entry => entry.name) } });
     const detectedSku = normalizeRequiredSku(data.sku) || normalizeRequiredSku(data.visibleText) || normalizeRequiredSku(data.summary);
+    Object.assign(scanDraft, screenDraftFields(data));
     scanDraft.sku = detectedSku || scanDraft.sku;
     scanDraft.name = data.productName || scanDraft.name;
     scanDraft.departmentId = analyzedDepartmentId(data);
     scanDraft.barcode = data.barcode || scanDraft.barcode;
     scanDraft.confidence = typeof data.confidence === "number" ? data.confidence : .5;
     scanDraft.rawText = data.summary || data.visibleText || "Étiquette analysée";
-    if (labelBatch) { const entry = labelBatch.entries[labelBatch.index]; entry.error = ""; Object.assign(entry.fields, { sku: scanDraft.sku, name: scanDraft.name, departmentId: scanDraft.departmentId }); }
+    if (labelBatch) { const entry = labelBatch.entries[labelBatch.index]; entry.error = ""; Object.assign(entry.fields, { sku: scanDraft.sku, name: scanDraft.name, departmentId: scanDraft.departmentId, ...screenDraftFields(data) }); }
     render();
     toast(detectedSku ? "Numéro détecté — vérifie le résultat" : "Analyse terminée — numéro à confirmer manuellement");
   } catch (error) {
