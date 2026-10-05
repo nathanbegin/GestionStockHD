@@ -131,7 +131,7 @@
       ${users.length ? `<div class="um-people-list">${users
         .slice()
         .sort((a, b) => String(a.fullName).localeCompare(String(b.fullName), "fr", { sensitivity: "base" }))
-        .map(user => `<div class="um-person-row"><strong>${escapeHTML(user.fullName)}</strong><div class="tags">${roleBadges(user)}${departmentBadges(user, departmentById)}</div></div>`)
+        .map(user => `<div class="um-person-row"><span class="tag">${escapeHTML(user.fullName)}</span></div>`)
         .join("")}</div>` : `<p class="small muted">Aucun employé.</p>`}
     </article>`;
   }
