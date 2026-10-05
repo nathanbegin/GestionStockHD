@@ -124,8 +124,63 @@
       if (analysis) feedback.append(analysis);
     }
 
+    const image = feedback.querySelector(".preview img");
+    if (image) {
+      image.tabIndex = 0;
+      image.setAttribute("role", "button");
+      image.setAttribute("aria-label", "Agrandir la photo de l’étiquette");
+      image.setAttribute("aria-haspopup", "dialog");
+      image.title = "Agrandir la photo";
+    }
     if (sourceSection) sourceSection.classList.add("sku-ai-source-section");
   }
+
+  function enlargeLabelPhoto(image) {
+    if (!image?.src || document.querySelector(".sku-photo-dialog")) return;
+    const dialog = document.createElement("dialog");
+    dialog.className = "sku-photo-dialog";
+    dialog.setAttribute("aria-label", "Photo de l’étiquette agrandie");
+    const close = document.createElement("button");
+    close.type = "button";
+    close.className = "button sku-photo-close";
+    close.textContent = "Fermer ✕";
+    const enlarged = document.createElement("img");
+    enlarged.src = image.currentSrc || image.src;
+    enlarged.alt = image.alt || "Photo de l’étiquette";
+    dialog.append(close, enlarged);
+    document.body.append(dialog);
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    close.addEventListener("click", () => dialog.close());
+    dialog.addEventListener("click", event => {
+      if (event.target !== dialog) return;
+      const bounds = dialog.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right ||
+          event.clientY < bounds.top || event.clientY > bounds.bottom) dialog.close();
+    });
+    dialog.addEventListener("close", () => {
+      document.body.style.overflow = previousOverflow;
+      dialog.remove();
+      if (image.isConnected) image.focus({ preventScroll: true });
+    }, { once: true });
+    dialog.showModal();
+    close.focus();
+  }
+
+  document.addEventListener("click", event => {
+    const image = event.target.closest?.(".sku-ai-feedback .preview img");
+    if (!image) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    enlargeLabelPhoto(image);
+  }, true);
+
+  document.addEventListener("keydown", event => {
+    if (!event.target.matches?.(".sku-ai-feedback .preview img") ||
+        !["Enter", " "].includes(event.key)) return;
+    event.preventDefault();
+    enlargeLabelPhoto(event.target);
+  });
 
   function enhanceScanSku(form) {
     const input = form.querySelector(SKU_SELECTOR);
