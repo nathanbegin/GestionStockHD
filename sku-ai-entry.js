@@ -36,11 +36,10 @@
 
   function stabilizeEntryPosition(form) {
     if (!form?.matches?.(SCAN_FORM_SELECTOR)) return;
-    if (!entryLaunchPending && window.scrollY <= 12) return;
+    if (!entryLaunchPending) return;
     entryLaunchPending = false;
     resetEntryScroll();
-    requestAnimationFrame(resetEntryScroll);
-    window.setTimeout(resetEntryScroll, 100);
+
   }
 
   function goToUnifiedEntry() {
@@ -178,7 +177,10 @@
       helper.className = "sku-ai-helper";
       control.insertAdjacentElement("afterend", helper);
     }
-    helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>Caméra ou photo = analyse IA automatique</span>`;
+    if (!helper.dataset.ready) {
+      helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>Caméra ou photo = analyse IA automatique</span>`;
+      helper.dataset.ready = "true";
+    }
 
     const batchSection = document.querySelector("[data-label-batch-section]");
     if (batchSection) {
@@ -244,7 +246,7 @@
       const title = scan.querySelector("h3");
       const text = scan.querySelector("p");
       if (icon) icon.textContent = "＋";
-      if (title) title.textContent = "Ajouter un article";
+      if (title && title.textContent !== "Ajouter un article") title.textContent = "Ajouter un article";
       if (text) text.textContent = "SKU, caméra ou photo avec analyse IA.";
       manual?.remove();
     }
@@ -253,7 +255,7 @@
   function enhancePageTitle() {
     if (!document.querySelector(SCAN_FORM_SELECTOR)) return;
     const title = document.querySelector("#pageTitle");
-    if (title) title.textContent = "Ajouter un article";
+    if (title && title.textContent !== "Ajouter un article") title.textContent = "Ajouter un article";
   }
 
   function enhanceVisibleContent() {
