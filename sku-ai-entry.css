@@ -269,3 +269,27 @@
 .batch-thumbnail > span { font-size: 11px; line-height: 1.3; overflow-wrap: anywhere; }
 .batch-thumbnail:disabled { opacity: .65; }
 .batch-thumbnail-missing { display: grid; place-items: center; height: 78px; }
+
+/* Les contenus IA ne doivent pas imposer leur largeur au formulaire. */
+.article-wizard .form-grid,
+.article-wizard .sku-ai-label,
+.sku-ai-control,
+.sku-ai-feedback,
+.sku-ai-feedback > *,
+.sku-ai-batch-panel,
+.batch-carousel {
+  min-width: 0;
+  max-width: 100%;
+}
+.sku-ai-feedback { grid-template-columns: minmax(0, 1fr); width: 100%; }
+.sku-ai-feedback .analysis-box,
+.sku-ai-feedback .notice,
+.sku-ai-feedback .analysis-box p,
+.sku-ai-feedback .tag,
+.sku-ai-feedback .confidence {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+.sku-ai-feedback .preview { width: 100%; min-width: 0; }
+.sku-ai-feedback .preview img { width: 100%; max-width: 100%; min-width: 0; }
+.article-wizard .form-grid:has(> .sku-ai-label:not([hidden])) { overflow-x: hidden; }
