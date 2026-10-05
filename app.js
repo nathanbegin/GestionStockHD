@@ -46,6 +46,8 @@ const defaultState = () => ({
   meta: { updatedAt: nowIso(), lastSyncAt: null }
 });
 
+let lastRenderedHTML = "";
+let lastRenderedView = null;
 let state = loadState();
 let pendingStatusChanges = loadPendingStatusChanges();
 let authClient = null;
@@ -550,7 +552,58 @@ function setView(view) {
     syncNow({ silent: true, broadcast: false, source: "deferred" });
   }
 }
-function render() {
+function updateCloudList(previousHTML, nextHTML) {
+  if (currentView !== "lists" || bulkEditOpen) return false;
+  const previous = document.createElement("template");
+  const next = document.createElement("template");
+  previous.innerHTML = previousHTML;
+  next.innerHTML = nextHTML;
+  const oldList = previous.content.querySelector(".item-list");
+  const newList = next.content.querySelector(".item-list");
+  const liveList = els.appMain.querySelector(".item-list");
+  if (!oldList || !newList || !liveList) return false;
+  // Compare the surrounding page before changing only the list and its counts.
+  const pageShell = template => {
+    const copy = template.content.cloneNode(true);
+    copy.querySelector(".item-list").replaceChildren();
+    copy.querySelector(".selection-toolbar")?.replaceChildren();
+    const heading = copy.querySelector(".section-head h2");
+    if (heading) heading.textContent = "";
+    const box = document.createElement("div"); box.append(copy);
+    return box.innerHTML;
+  };
+  if (pageShell(previous) !== pageShell(next)) return false;
+  const oldCards = new Map([...oldList.children].map(card => [card.dataset.syncKey, card.outerHTML]));
+  const liveCards = new Map([...liveList.children].map(card => [card.dataset.syncKey, card]));
+  const wanted = new Set();
+  let cursor = liveList.firstElementChild;
+  for (const card of [...newList.children]) {
+    const key = card.dataset.syncKey;
+    wanted.add(key);
+    let live = liveCards.get(key);
+    if (!live || oldCards.get(key) !== card.outerHTML) {
+      if (live) {
+        const opened = live.querySelector("details")?.open;
+        live.replaceWith(card);
+        if (opened && card.querySelector("details")) card.querySelector("details").open = true;
+        if (cursor === live) cursor = card;
+      }
+      live = card;
+    }
+    if (live !== cursor) liveList.insertBefore(live, cursor);
+    cursor = live.nextElementSibling;
+  }
+  for (const [key, card] of liveCards) if (!wanted.has(key)) card.remove();
+  const heading = els.appMain.querySelector(".section:not(.article-entry-options) .section-head h2");
+  const nextHeading = next.content.querySelector(".section-head h2");
+  if (heading && nextHeading) heading.textContent = nextHeading.textContent;
+  const toolbar = els.appMain.querySelector(".selection-toolbar");
+  const oldToolbar = previous.content.querySelector(".selection-toolbar");
+  const newToolbar = next.content.querySelector(".selection-toolbar");
+  if (toolbar && newToolbar && oldToolbar?.outerHTML !== newToolbar.outerHTML) toolbar.replaceWith(newToolbar);
+  return true;
+}
+function render({ soft = false } = {}) {
   selectedIds = new Set([...selectedIds].filter(id => state.items.some(item => item.id === id)));
   const titles = {
     dashboard: "Aperçu",
@@ -580,7 +633,22 @@ function render() {
     users: renderUsers,
     settings: renderSettings
   }[currentView] || renderDashboard;
-  els.appMain.innerHTML = renderer();
+  const html = renderer();
+  if (soft && lastRenderedView === currentView) {
+    const withoutSyncTime = value => value.replace(/(<span data-sync-time>)[\s\S]*?(<\/span>)/g, "$1$2");
+    if (withoutSyncTime(html) === withoutSyncTime(lastRenderedHTML)) {
+      const syncTime = els.appMain.querySelector("[data-sync-time]");
+      if (syncTime) syncTime.textContent = formatDate(state.meta.lastSyncAt);
+      lastRenderedHTML = html;
+      updateSyncIndicator();
+      return;
+    }
+    const scrollX = window.scrollX, scrollY = window.scrollY;
+    if (!updateCloudList(lastRenderedHTML, html)) els.appMain.innerHTML = html;
+    window.scrollTo({ left: scrollX, top: scrollY, behavior: "instant" });
+  } else els.appMain.innerHTML = html;
+  lastRenderedHTML = html;
+  lastRenderedView = currentView;
   updateSyncIndicator();
   queueMicrotask(hydrateStockPhotos);
 }
@@ -815,7 +883,7 @@ function renderStockPhoto(item, className = "") {
 }
 function renderItemCard(item, { selectable = true, compact = false } = {}) {
   const selected = selectedIds.has(item.id);
-  return `<article class="card item-card ${selected ? "selected" : ""} ${compact ? "compact-item-card" : ""}">
+  return `<article data-sync-key="${escapeHTML(item.id)}" class="card item-card ${selected ? "selected" : ""} ${compact ? "compact-item-card" : ""}">
     ${selectable ? `<label class="item-select"><input class="select-item" type="checkbox" data-id="${item.id}" ${selected ? "checked" : ""}> Sélectionner</label>` : ""}
     <div class="item-top"><div class="item-title"><div class="item-qty item-qty-with-unit">${escapeHTML(quantityLabel(item))}</div><div><h3>${escapeHTML(item.name || "Article sans description")}</h3><p class="sku">${escapeHTML(formatSku(item.sku))}</p></div></div><button class="status-button" data-action="cycle-status" data-id="${item.id}" data-status="${item.status}">${STATUS_LABELS[item.status]}</button></div>
     <div class="tags"><span class="tag">${escapeHTML(listName(item.listId))}</span><span class="tag">${escapeHTML(departmentName(item.departmentId))}</span><span class="tag ${item.priority}">${PRIORITY_LABELS[item.priority]}</span>${renderAssignmentTags(item)}<span class="tag">Par ${escapeHTML(item.updatedBy || item.createdBy || "—")}</span></div>
@@ -986,7 +1054,7 @@ function renderSettings() {
   const manager = roleAtLeast("supervisor");
   return `<section class="section"><div class="settings-grid">
     <article class="card"><h2>Compte actuel</h2><p><strong>${escapeHTML(currentName())}</strong></p><p class="small muted">${escapeHTML(authSession?.user?.email || "")} · ${escapeHTML(ROLE_LABELS[currentProfile?.role] || currentProfile?.role || "")}</p><p class="small"><strong>Permis lift :</strong> ${escapeHTML(liftPermitLabel(employeeById(currentEmployeeId()) || {}))}</p><button class="button danger" data-action="logout">Déconnexion</button></article>
-    <article class="card"><h2>Synchronisation automatique</h2><p class="muted small">Chaque ajout ou modification est envoyé automatiquement. Les appareils connectés reçoivent un signal en temps réel et une vérification périodique sert de repli.</p><p class="small"><strong>Dernière synchro :</strong> ${formatDate(state.meta.lastSyncAt)}</p><p class="small"><strong>État :</strong> ${realtimeActive ? "Connexion en direct active" : navigator.onLine ? "Cloud avec vérification périodique" : "Hors ligne"}</p><div class="button-row"><button class="button primary" data-action="sync">Synchroniser maintenant</button><button class="button" data-action="health">Tester les services</button></div><div id="healthResult" class="analysis-box" hidden></div></article>
+    <article class="card"><h2>Synchronisation automatique</h2><p class="muted small">Chaque ajout ou modification est envoyé automatiquement. Les appareils connectés reçoivent un signal en temps réel et une vérification périodique sert de repli.</p><p class="small"><strong>Dernière synchro :</strong> <span data-sync-time>${formatDate(state.meta.lastSyncAt)}</span></p><p class="small"><strong>État :</strong> ${realtimeActive ? "Connexion en direct active" : navigator.onLine ? "Cloud avec vérification périodique" : "Hors ligne"}</p><div class="button-row"><button class="button primary" data-action="sync">Synchroniser maintenant</button><button class="button" data-action="health">Tester les services</button></div><div id="healthResult" class="analysis-box" hidden></div></article>
     <article class="card"><h2>Magasin</h2>${isAdmin() ? `<form id="storeForm"><label>Nom du magasin<input name="storeName" value="${escapeHTML(state.settings.storeName)}"></label><label class="check-card"><span><input type="checkbox" name="keepPhotos" ${state.settings.keepPhotos ? "checked" : ""}> Conserver les photos d’étiquettes par défaut</span></label><div class="form-actions"><button class="button primary" type="submit">Enregistrer</button></div></form>` : `<p class="muted">${escapeHTML(state.settings.storeName)}</p><p class="small muted">Seul un administrateur peut modifier ces réglages.</p>`}</article>
     ${manager ? `<article class="card"><h2>Listes source</h2><form id="listForm" class="inline-form"><label>Nouvelle liste<input name="name" required maxlength="80"></label><button class="button primary" type="submit">Ajouter</button></form><div class="manage-list">${state.lists.map(x => `<div class="manage-row"><span>${escapeHTML(x.name)}</span><button class="button compact danger" data-action="delete-list" data-id="${x.id}">Supprimer</button></div>`).join("")}</div></article><article class="card"><h2>Départements</h2><form id="departmentForm" class="inline-form"><label>Nouveau département<input name="name" required maxlength="80"></label><button class="button primary" type="submit">Ajouter</button></form><div class="manage-list">${state.departments.map(x => `<div class="manage-row"><span>${escapeHTML(x.name)}</span><button class="button compact danger" data-action="delete-department" data-id="${x.id}">Supprimer</button></div>`).join("")}</div></article>` : ""}
     <article class="card"><h2>Données et rapports</h2><p class="muted small">Les rapports PDF sont disponibles dans chaque liste de ramassage personnalisée.</p><div class="button-row"><button class="button" data-action="export-json">Exporter JSON</button><button class="button" data-action="export-csv">Exporter CSV</button><button class="button" data-action="import-json">Importer JSON</button></div></article>
@@ -1351,6 +1419,7 @@ async function hydrateStockPhotos() {
   for (const img of images) {
     const cached = photoUrlCache.get(img.dataset.stockPhotoPath);
     if (!cached) continue;
+    if (img.getAttribute("src") === cached.url) continue;
     img.src = cached.url;
     img.addEventListener("load", () => img.parentElement?.classList.add("loaded"), { once: true });
   }
@@ -1398,7 +1467,8 @@ async function syncNow({ silent = false, broadcast = true, source = "manual" } =
       saveState({ touch: false, sync: false });
       if (pendingStatusChanges.length) syncAgain = true;
       syncMode = pendingStatusChanges.length ? "pending" : (realtimeActive ? "realtime" : "cloud");
-      if (!formDirty || source === "manual" || source === "auto") render();
+      if (!formDirty && !["scan", "manual"].includes(currentView)) render({ soft: true });
+      else updateSyncIndicator();
       if (broadcast && realtimeActive && realtimeChannel) {
         await realtimeChannel.send({ type: "broadcast", event: "state-changed", payload: { clientId, updatedAt: state.meta.updatedAt } });
       }
