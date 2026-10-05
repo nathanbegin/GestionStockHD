@@ -210,3 +210,14 @@ Créez un fichier `.env.local` à partir de `.env.example` et renseignez les var
 ---
 
 Projet : [nathanbegin/GestionStockHD](https://github.com/nathanbegin/GestionStockHD)
+
+
+### Console administrateur (v5-104)
+
+Dans **Plus → Console administrateur**, les comptes administrateurs approuvés peuvent lancer un diagnostic et exporter un rapport JSON. Le serveur vérifie le rôle avant tout diagnostic privilégié via `GET /api/health?admin=1`. Le nombre de fonctions Vercel reste inchangé.
+
+La console teste les lectures de `app_state` et `profiles`, l'accès au bucket privé et la connexion à OpenAI (lecture des modèles, aucune génération). Elle expose des compteurs et identifiants utiles, pas les snapshots, données de profils, clés ou jetons. Les temps de réponse sont des mesures ponctuelles, l'historique reste dans la session. Le statut Realtime représente la connexion de l'appareil. Mémoire et uptime concernent seulement le processus serverless qui répond.
+
+Pour activer les métriques PostgreSQL, exécuter `supabase/admin-console-metrics.sql` une fois dans le SQL Editor du projet. Cette fonction est accessible uniquement au rôle serveur `service_role` ; les rôles `anon` et `authenticated` n'y ont pas accès. Elle retourne la taille de la base et des tables, les estimations de lignes et tuples morts, les connexions et les tailles déclarées des objets Storage. Les tailles Storage reposent sur les métadonnées, pas sur le volume facturé. La taille PostgreSQL n'est pas la totalité du disque (WAL, etc.).
+
+Variables facultatives dans Vercel : `ADMIN_DATABASE_QUOTA_BYTES` et `ADMIN_STORAGE_QUOTA_BYTES`, limites réelles du projet exprimées en octets. Aucun plan ni quota par défaut n'est supposé. Les consommations facturées, egress, CPU historiques et budgets OpenAI nécessitent les outils de suivi du fournisseur et ne sont pas inférés. Si la fonction SQL est absente, les diagnostics de base restent disponibles et la console indique les métriques manquantes.

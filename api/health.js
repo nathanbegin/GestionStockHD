@@ -1,6 +1,8 @@
+import adminDiagnostics from "../lib/admin-diagnostics.js";
 import { json } from "../lib/auth.js";
 
 export default function handler(_request, response) {
+  if (_request.query?.admin === "1") return adminDiagnostics(_request, response);
   const supabaseConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_SECRET_KEY);
   const authConfigured = Boolean(process.env.SUPABASE_URL && process.env.SUPABASE_PUBLISHABLE_KEY);
   return json(response, 200, {

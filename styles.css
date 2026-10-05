@@ -526,3 +526,10 @@ details summary { cursor: pointer; color: var(--brand-2); font-weight: 750; }
   .app-brand-heading { padding-left: 42px; }
   .app-brand-logo { width: 34px; height: 34px; }
 }
+
+.console-table-wrap { max-width: 100%; overflow-x: auto; }
+.console-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.console-table th, .console-table td { text-align: left; vertical-align: top; padding: 8px 5px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
+.console-table th { width: 43%; }
+.admin-console .card { min-width: 0; }
+.admin-console .settings-grid { align-items: start; }

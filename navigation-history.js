@@ -11,6 +11,7 @@
     ["Historique", "history"],
     ["Utilisateurs", "users"],
     ["Permis de lift", "lift-permits"],
+    ["Console administrateur", "admin-console"],
     ["Réglages", "settings"],
     ["Photo", "scan"],
     ["Ajouter un article", "scan"],

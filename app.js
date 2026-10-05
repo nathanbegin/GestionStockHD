@@ -46,6 +46,10 @@ const defaultState = () => ({
   meta: { updatedAt: nowIso(), lastSyncAt: null }
 });
 
+let adminDiagnosticsData = null;
+let adminDiagnosticsBusy = false;
+let adminDiagnosticsError = "";
+const adminDiagnosticsHistory = [];
 let lastRenderedHTML = "";
 let lastRenderedView = null;
 let state = loadState();
@@ -544,7 +548,7 @@ function setView(view) {
     editingPickupListId = null;
     pickupDraftItemIds = [];
   }
-  document.querySelectorAll("[data-nav]").forEach(btn => btn.classList.toggle("active", btn.dataset.nav === view || (btn.dataset.nav === "more" && ["history", "users", "lift-permits", "settings"].includes(view))));
+  document.querySelectorAll("[data-nav]").forEach(btn => btn.classList.toggle("active", btn.dataset.nav === view || (btn.dataset.nav === "more" && ["history", "users", "lift-permits", "admin-console", "settings"].includes(view))));
   render();
   window.scrollTo({ top: 0, behavior: "smooth" });
   if (remoteUpdatePending) {
@@ -617,6 +621,7 @@ function render({ soft = false } = {}) {
     history: "Historique",
     users: "Utilisateurs",
     "lift-permits": "Permis de lift",
+    "admin-console": "Console administrateur",
     settings: "Réglages"
   };
   els.pageTitle.textContent = titles[currentView] || "Remplissage";
@@ -633,6 +638,7 @@ function render({ soft = false } = {}) {
     history: renderHistory,
     users: renderUsers,
     "lift-permits": renderLiftPermits,
+    "admin-console": renderAdminConsole,
     settings: renderSettings
   }[currentView] || renderDashboard;
   const html = renderer();
@@ -1008,8 +1014,51 @@ function renderTour() {
   </article></section>`;
 }
 
+function diagnosticBytes(value) {
+  if (value === null || value === undefined) return "Indisponible";
+  return `${(Number(value) / 1024 / 1024).toFixed(2)} Mo`;
+}
+function diagnosticTable(rows) {
+  return `<div class="console-table-wrap"><table class="console-table"><tbody>${rows.map(([label, value]) => `<tr><th>${escapeHTML(label)}</th><td>${escapeHTML(value === null || value === undefined ? "Indisponible" : String(value))}</td></tr>`).join("")}</tbody></table></div>`;
+}
+function consoleClientState() {
+  return { online: navigator.onLine, syncMode, realtimeActive, syncInFlight: Boolean(syncInFlight), pendingStatusChanges: pendingStatusChanges.length, remoteUpdatePending, clientId, lastSyncAt: state.meta.lastSyncAt, localSnapshotBytes: new Blob([JSON.stringify(state)]).size, visibility: document.visibilityState };
+}
+async function loadAdminDiagnostics() {
+  if (!isAdmin() || adminDiagnosticsBusy) return;
+  adminDiagnosticsBusy = true; adminDiagnosticsError = "";
+  if (currentView === "admin-console") render({ soft: true });
+  const start = performance.now();
+  try {
+    adminDiagnosticsData = await apiRequest("/api/health?admin=1");
+    adminDiagnosticsHistory.unshift({ time: adminDiagnosticsData.time, latencyMs: Math.round(performance.now() - start), failures: adminDiagnosticsData.services.filter(service => !service.ok && service.name !== "databaseMetrics").length });
+    adminDiagnosticsHistory.splice(20);
+  } catch (error) { adminDiagnosticsError = error.message; }
+  finally { adminDiagnosticsBusy = false; if (currentView === "admin-console" && isAdmin()) render({ soft: true }); }
+}
+function renderAdminConsole() {
+  if (!isAdmin()) return `<section class="section">${renderEmpty("Accès réservé", "Cette console est réservée aux administrateurs.")}</section>`;
+  const data = adminDiagnosticsData, client = consoleClientState();
+  const metrics = data?.databaseMetrics;
+  const quota = (used, limit) => limit && used !== null && used !== undefined ? `${diagnosticBytes(used)} / ${diagnosticBytes(limit)} (${Math.round(used / limit * 100)} %)` : `${diagnosticBytes(used)} · quota non configuré`;
+  const names = { database: "Base / snapshot", profiles: "Comptes / authentification", storage: "Stockage des photos", databaseMetrics: "Métriques PostgreSQL", openai: "Connexion OpenAI (sans génération)" };
+  return `<section class="section admin-console"><div class="section-head"><div><h2>Console de management</h2><p class="muted">Diagnostic à la demande · ${data ? `Mesuré le ${escapeHTML(formatDate(data.time))}` : "Aucun diagnostic chargé"}</p></div></div>
+    <div class="button-row"><button class="button primary" data-action="admin-diagnostics" ${adminDiagnosticsBusy ? "disabled" : ""}>${adminDiagnosticsBusy ? "Vérification…" : "Actualiser les diagnostics"}</button><button class="button" data-action="admin-export" ${data ? "" : "disabled"}>Exporter le rapport JSON</button><button class="button" data-action="sync">Synchroniser le cloud</button></div>
+    ${adminDiagnosticsError ? `<p class="notice">${escapeHTML(adminDiagnosticsError)}</p>` : ""}
+    <div class="settings-grid top-gap">
+      <article class="card"><h3>Connexions et latences</h3>${data ? diagnosticTable(data.services.map(service => [names[service.name] || service.name, `${service.ok ? "OK" : service.name === "databaseMetrics" ? "Métriques indisponibles" : "Échec"} · ${service.latencyMs} ms${service.code ? ` · ${service.code}` : ""}`])) : `<p>Lance un diagnostic pour tester les services.</p>`}<p class="small muted">Temps côté serveur : ${data?.durationMs ?? "—"} ms. Realtime ci-dessous indique la connexion de cet appareil.</p></article>
+      <article class="card"><h3>Cet appareil et synchronisation</h3>${diagnosticTable(Object.entries(client))}</article>
+      <article class="card"><h3>Base et stockage</h3>${diagnosticTable([["Base PostgreSQL", quota(metrics?.databaseBytes, data?.quotas.databaseBytes)], ["Fichiers Storage (taille déclarée)", quota(metrics?.storageBytes, data?.quotas.storageBytes)], ["Objets Storage", metrics?.storageObjects], ["Objets sans taille déclarée", metrics?.storageObjectsMissingSize], ["Snapshot JSON cloud (hors index)", diagnosticBytes(data?.snapshotBytes)], ["Connexions PostgreSQL", metrics?.connections], ["Connexions actives", metrics?.activeConnections], ["Maximum configuré", metrics?.maxConnections], ["Bucket privé", data?.storage ? !data.storage.public : null], ["Limite par fichier du bucket", data?.storage?.fileSizeLimit ? diagnosticBytes(data.storage.fileSizeLimit) : "Non définie"]])}
+      ${!metrics ? `<p class="small muted">Pour activer les tailles réelles et les statistiques SQL, exécute une fois <a href="https://github.com/nathanbegin/GestionStockHD/blob/main/supabase/admin-console-metrics.sql" target="_blank" rel="noopener">admin-console-metrics.sql</a> dans le SQL Editor Supabase.</p>` : ""}<p class="small muted">Les quotas nécessitent ADMIN_DATABASE_QUOTA_BYTES et ADMIN_STORAGE_QUOTA_BYTES dans Vercel. La taille PostgreSQL ne représente pas tout le disque et les quotas de facturation ne sont pas récupérés automatiquement.</p></article>
+      <article class="card"><h3>Données cloud</h3>${data ? diagnosticTable(Object.entries(data.counts)) : "Indisponible"}</article>
+      <article class="card"><h3>IDs et déploiement</h3>${data ? diagnosticTable(Object.entries(data.identifiers)) : "Indisponible"}</article>
+      <article class="card"><h3>Serveur et configuration</h3>${data ? diagnosticTable([["Node", data.runtime.node], ["Durée de vie du processus (secondes)", data.runtime.processUptimeSeconds], ["Mémoire RSS", diagnosticBytes(data.runtime.memory.rss)], ["Heap utilisé", diagnosticBytes(data.runtime.memory.heapUsed)], ...Object.entries(data.configuration)]) : "Indisponible"}<p class="small muted">Mesures du processus serverless répondant à cette requête, pas de l’ensemble des serveurs.</p></article>
+      <article class="card"><h3>Tables PostgreSQL</h3>${metrics ? diagnosticTable(metrics.tables.map(table => [`${table.schema}.${table.name}`, `${diagnosticBytes(table.bytes)} · ~${table.estimatedRows} lignes · ${table.deadRows} tuples morts`])) : "Installe la fonction SQL pour consulter les tables."}</article>
+      <article class="card"><h3>Derniers diagnostics de cette session</h3>${diagnosticTable(adminDiagnosticsHistory.map(entry => [formatDate(entry.time), `${entry.latencyMs} ms aller-retour · ${entry.failures} échec(s)`]))}${data?.dashboards.supabase ? `<a class="button compact" href="${escapeHTML(data.dashboards.supabase)}" target="_blank" rel="noopener">Ouvrir le projet Supabase</a>` : ""}<p class="small muted">Le rapport exporté comprend les mesures, IDs et historiques de diagnostic ; aucune clé API ni aucun jeton de session.</p></article>
+    </div></section>`;
+}
 function renderMore() {
-  return `<section class="section"><div class="grid more-grid"><button class="card action-card" data-action="go" data-view="history"><span class="icon">≡</span><h3>Historique</h3><p>Consulter les ajouts, attributions et ramassages.</p></button>${canManageUsers() ? `<button class="card action-card" data-action="go" data-view="users"><span class="icon">👥</span><h3>Utilisateurs</h3><p>Approuver les demandes et gérer les rôles.</p></button>` : ""}<button class="card action-card" data-action="go" data-view="settings"><span class="icon">⚙</span><h3>Réglages</h3><p>Magasin, listes, départements et exportations.</p></button><button class="card action-card danger-action" data-action="logout"><span class="icon">↪</span><h3>Déconnexion</h3><p>Fermer la session de ${escapeHTML(currentName())}.</p></button></div></section>`;
+  return `<section class="section"><div class="grid more-grid">${isAdmin() ? `<button class="card action-card" data-action="go" data-view="admin-console"><span class="icon">▤</span><h3>Console administrateur</h3><p>Services, serveurs, IDs, tailles et diagnostics.</p></button>` : ""}<button class="card action-card" data-action="go" data-view="history"><span class="icon">≡</span><h3>Historique</h3><p>Consulter les ajouts, attributions et ramassages.</p></button>${canManageUsers() ? `<button class="card action-card" data-action="go" data-view="users"><span class="icon">👥</span><h3>Utilisateurs</h3><p>Approuver les demandes et gérer les rôles.</p></button>` : ""}<button class="card action-card" data-action="go" data-view="settings"><span class="icon">⚙</span><h3>Réglages</h3><p>Magasin, listes, départements et exportations.</p></button><button class="card action-card danger-action" data-action="logout"><span class="icon">↪</span><h3>Déconnexion</h3><p>Fermer la session de ${escapeHTML(currentName())}.</p></button></div></section>`;
 }
 function historyTypeLabel(type) {
   return ({ item_added: "Ajout", item_updated: "Modification", status_changed: "Ramassage", item_deleted: "Suppression", assignment_changed: "Attribution", pickup_created: "Liste créée", pickup_updated: "Liste modifiée", pickup_deleted: "Liste supprimée" })[type] || "Activité";
@@ -1822,7 +1871,13 @@ els.appMain.addEventListener("click", async event => {
   const button = event.target.closest("[data-action]");
   if (!button) return;
   const action = button.dataset.action;
+  if (action === "admin-diagnostics") return loadAdminDiagnostics();
+  if (action === "admin-export" && isAdmin() && adminDiagnosticsData) return downloadBlob(JSON.stringify({ ...adminDiagnosticsData, client: consoleClientState(), history: adminDiagnosticsHistory }, null, 2), "application/json", `diagnostic-${Date.now()}.json`);
   if (action === "go") {
+    if (button.dataset.view === "admin-console") {
+      if (!isAdmin()) return toast("Accès réservé aux administrateurs");
+      setView("admin-console"); return loadAdminDiagnostics();
+    }
     if (button.dataset.view === "tour") { activePickupListId = null; tourIndex = 0; }
     return setView(button.dataset.view);
   }

@@ -11,6 +11,7 @@
     "users",
     "lift-permits",
     "settings",
+    "admin-console",
     "scan"
   ]);
   const TITLE_TO_VIEW = new Map([
@@ -23,6 +24,7 @@
     ["Historique", "history"],
     ["Utilisateurs", "users"],
     ["Permis de lift", "lift-permits"],
+    ["Console administrateur", "admin-console"],
     ["Réglages", "settings"],
     ["Photo", "scan"],
     ["Ajouter un article", "scan"]
