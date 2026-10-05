@@ -570,3 +570,7 @@ details summary { cursor: pointer; color: var(--brand-2); font-weight: 750; }
 @media (max-width: 699px) {
   .app-brand-heading { grid-template-columns: 34px minmax(0, 1fr); gap: 2px 8px; }
 }
+
+.console-metric-chart { display: block; width: 100%; max-width: 100%; height: auto; }
+.console-prometheus { min-width: 0; }
+.console-prometheus .console-table td, .console-prometheus .console-table th { overflow-wrap: anywhere; }

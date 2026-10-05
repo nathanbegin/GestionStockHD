@@ -227,3 +227,11 @@ Variables facultatives dans Vercel : `ADMIN_DATABASE_QUOTA_BYTES` et `ADMIN_STOR
 Les vérifications cloud utilisent `GET /api/sync?since=<revision>` : seule la colonne `updated_at` est lue lorsque la révision est identique. Le snapshot est téléchargé lorsqu’elle change. Les éditions locales et les modifications de statut en attente utilisent toujours la fusion authentifiée par POST. Un marqueur local persistant conserve les éditions non envoyées après un rechargement ou une panne réseau. Les notifications Realtime déclenchent une vérification ; une vérification de secours a lieu toutes les 60 secondes lorsque la page est visible et aucun formulaire n’est modifié. Les POST sans changement de contenu ne réécrivent pas la base et ne diffusent pas de notification. Aucun changement SQL n’est nécessaire.
 
 Les transferts d’un snapshot ayant réellement changé restent complets ; les photos d’étiquettes conservées dans ce JSON contribuent donc encore à sa taille.
+
+### Console Prometheus (v5-110)
+
+La console administrateur collecte l’API Supabase `/customer/v1/privileged/metrics` via `/api/health?admin=1&metrics=1`. L’autorisation administrateur est vérifiée avant chaque accès et la clé `SUPABASE_SECRET_KEY` reste sur le serveur (HTTP Basic Auth). Aucun nouvel endpoint serverless ni migration SQL n’est requis. Les collectes sont espacées de 60 secondes lorsque la console est visible, avec cache et déduplication des requêtes concurrentes par processus. Des instances Vercel distinctes peuvent chacune effectuer leur propre collecte. Les erreurs sont également mises en cache 60 secondes.
+
+Graphiques CPU, mémoire, connexions, réseau sortant et débit disque selon les séries réellement disponibles ; CPU et débits nécessitent deux mesures et les resets de compteurs ne sont pas affichés comme des débits négatifs. Historique en mémoire de 180 mesures, perdu au rechargement ; export JSON avec séries et historique. Pour une rétention continue, utiliser Prometheus/Grafana. Le réseau du serveur ne correspond pas au quota Egress facturé. Taille de collecte affichée en Mo avant compression éventuelle ; trafic réel de facturation à consulter dans Usage Supabase.
+
+Documentation : https://supabase.com/docs/guides/observability/metrics/grafana-self-hosted

@@ -1033,8 +1033,74 @@ function diagnosticTable(rows) {
 function consoleClientState() {
   return { online: navigator.onLine, syncMode, realtimeActive, syncInFlight: Boolean(syncInFlight), pendingStatusChanges: pendingStatusChanges.length, remoteUpdatePending, clientId, lastSyncAt: state.meta.lastSyncAt, localSnapshotBytes: new Blob([JSON.stringify(state)]).size, visibility: document.visibilityState };
 }
+let prometheusData = null;
+let prometheusBusy = false;
+let prometheusError = '';
+const prometheusHistory = [];
+async function loadPrometheusMetrics() {
+  if (!isAdmin() || prometheusBusy || currentView !== 'admin-console') return;
+  prometheusBusy = true;
+  try {
+    const data = await apiRequest('/api/health?admin=1&metrics=1');
+    prometheusData = data.prometheus;
+    prometheusError = '';
+    if (prometheusData.ok && prometheusHistory.at(-1)?.collectedAt !== prometheusData.collectedAt) {
+      prometheusHistory.push(prometheusData);
+      if (prometheusHistory.length > 180) prometheusHistory.shift();
+    }
+  } catch (error) { prometheusError = error.message; }
+  finally { prometheusBusy = false; if (currentView === 'admin-console' && isAdmin()) render({ soft: true }); }
+}
+function prometheusSummary(sample, previous) {
+  const rows = sample?.series || [];
+  const sum = name => { const matches = rows.filter(s => s.name === name); return matches.length ? matches.reduce((n,s) => n + s.value, 0) : null; };
+  const rate = (name, filter = () => true) => {
+    if (!previous || sample.collectedAt <= previous.collectedAt) return null;
+    const old = new Map(previous.series.filter(s => s.name === name && filter(s)).map(s => [JSON.stringify(s.labels), s.value]));
+    const values = rows.filter(s => s.name === name && filter(s));
+    if (!values.length || values.some(s => !old.has(JSON.stringify(s.labels)) || s.value < old.get(JSON.stringify(s.labels)))) return null;
+    return values.reduce((n,s) => n + s.value - old.get(JSON.stringify(s.labels)), 0) / ((sample.collectedAt - previous.collectedAt) / 1000);
+  };
+  const total = sum('node_memory_MemTotal_bytes'), available = sum('node_memory_MemAvailable_bytes');
+  const cpuTotal = rate('node_cpu_seconds_total'), cpuIdle = rate('node_cpu_seconds_total', s => s.labels.mode === 'idle');
+  return { cpu: cpuTotal > 0 && cpuIdle !== null ? Math.max(0, Math.min(100, 100 * (1 - cpuIdle / cpuTotal))) : null,
+    memory: total > 0 && available !== null ? (total - available) / total * 100 : null,
+    connections: sum('pg_stat_database_num_backends'),
+    network: rate('node_network_transmit_bytes_total', s => s.labels.device !== 'lo'),
+    reads: rate('node_disk_read_bytes_total'), writes: rate('node_disk_written_bytes_total') };
+}
+function renderPrometheusMetrics() {
+  const data = prometheusData;
+  const points = prometheusHistory.map((sample,i) => ({ time: sample.collectedAt, ...prometheusSummary(sample, prometheusHistory[i-1]) }));
+  const chart = (key,title,unit) => {
+    const values = points.filter(p => p[key] !== null && Number.isFinite(p[key]));
+    const current = values.at(-1);
+    let plot = '<p class="small muted">En attente de mesures comparables.</p>';
+    if (values.length > 1) {
+      const start = points[0].time, span = Math.max(1, points.at(-1).time - start);
+      const max = Math.max(1, ...values.map(p => p[key]));
+      const coords = values.map(p => `${10 + (p.time-start)/span*380},${105-p[key]/max*90}`).join(' ');
+      plot = `<svg class="console-metric-chart" viewBox="0 0 400 120" role="img" aria-label="${escapeHTML(title)} : évolution pendant cette session"><path d="M10 15V105H390" fill="none" stroke="currentColor" opacity=".2"/><polyline points="${coords}" fill="none" stroke="#f76b00" stroke-width="3"/></svg><p class="tiny muted">${escapeHTML(formatDate(points[0].time))} → ${escapeHTML(formatDate(points.at(-1).time))} · maximum ${max.toFixed(1)} ${unit}</p>`;
+    }
+    return `<article class="card"><h3>${title}</h3><p><strong>${current ? current[key].toFixed(1) + ' ' + unit : 'Indisponible'}</strong></p>${plot}</article>`;
+  };
+  return `<section class="console-prometheus top-gap"><div class="section-head"><div><h3>Métriques Supabase · Prometheus</h3><p class="small muted">Collecte toutes les 60 secondes lorsque cette console est visible · historique de cette session, jusqu’à 180 mesures.</p></div><button class="button" data-action="admin-metrics" ${prometheusBusy ? 'disabled' : ''}>Actualiser les métriques</button></div>
+    ${prometheusError ? `<p class="notice">${escapeHTML(prometheusError)}</p>` : ''}
+    ${data && !data.ok ? `<p class="notice">Métriques indisponibles (${escapeHTML(data.code)}). Vérifie SUPABASE_SECRET_KEY et l’accès à l’API Metrics de ce projet.</p>` : ''}
+    <p class="small muted">${data?.ok ? `${data.series.length} séries · dernière collecte ${escapeHTML(formatDate(data.time))} · ${diagnosticBytes(data.responseBytes)} reçus de Supabase${data.cached ? ' · cache serveur' : ''}` : 'Aucune mesure disponible.'}</p>
+    <div class="console-grid">${chart('cpu','Utilisation CPU','%')}${chart('memory','Utilisation mémoire','%')}${chart('connections','Connexions PostgreSQL','connexions')}${chart('network','Réseau sortant du serveur','octets/s')}${chart('reads','Lectures disque','octets/s')}${chart('writes','Écritures disque','octets/s')}</div>
+    <p class="small muted">Les débits et le CPU nécessitent deux collectes. Le réseau du serveur ne représente pas le quota Egress facturé par Supabase. Les valeurs manquantes restent indisponibles. Alerte de vigilance : CPU ou mémoire ≥ 80 %.</p>
+    ${points.at(-1)?.cpu >= 80 || points.at(-1)?.memory >= 80 ? '<p class="notice">Seuil de vigilance atteint : CPU ou mémoire ≥ 80 %.</p>' : ''}
+    ${data?.ok ? `<details class="card top-gap"><summary>Toutes les séries disponibles (${data.series.length})</summary>${diagnosticTable(data.series.map(s => [s.name + (Object.keys(s.labels).length ? ' ' + JSON.stringify(s.labels) : ''), s.value + ' · ' + s.type]))}</details>` : ''}
+  </section>`;
+}
+setInterval(() => {
+  if (currentView === 'admin-console' && document.visibilityState === 'visible' && navigator.onLine && isAdmin()) loadPrometheusMetrics();
+}, 60_000);
+
 async function loadAdminDiagnostics() {
   if (!isAdmin() || adminDiagnosticsBusy) return;
+  loadPrometheusMetrics();
   adminDiagnosticsBusy = true; adminDiagnosticsError = "";
   if (currentView === "admin-console") render({ soft: true });
   const start = performance.now();
@@ -1061,6 +1127,7 @@ function renderAdminConsole() {
   return `<section class="section admin-console"><div class="section-head"><div><h2>Console de management</h2><p class="muted">Diagnostic à la demande · ${data ? `Mesuré le ${escapeHTML(formatDate(data.time))}` : "Aucun diagnostic chargé"}</p></div></div>
     <div class="button-row"><button class="button primary" data-action="admin-diagnostics" ${adminDiagnosticsBusy ? "disabled" : ""}>${adminDiagnosticsBusy ? "Vérification…" : "Actualiser les diagnostics"}</button><button class="button" data-action="admin-export" ${data ? "" : "disabled"}>Exporter le rapport JSON</button><button class="button" data-action="sync">Synchroniser le cloud</button></div>
     ${adminDiagnosticsError ? `<p class="notice">${escapeHTML(adminDiagnosticsError)}</p>` : ""}
+    ${renderPrometheusMetrics()}
     <h3 class="top-gap">Utilisation / quotas Supabase Free</h3>
     <div class="console-grid">${quotaGauge("Base PostgreSQL (projet)", metrics?.databaseBytes, databaseLimit, diagnosticBytes(databaseLimit))}${quotaGauge("Stockage des fichiers (ce projet)", metrics?.storageBytes, storageLimit, diagnosticBytes(storageLimit))}</div>
     <p class="small muted">Limites de référence Free vérifiées le 4 octobre 2026. Les quotas Storage et mensuels sont partagés par l’organisation : ce projet seul peut sous-estimer son utilisation totale. <a href="https://supabase.com/pricing" target="_blank" rel="noopener">Source Supabase</a></p>
@@ -1903,7 +1970,8 @@ els.appMain.addEventListener("click", async event => {
   if (!button) return;
   const action = button.dataset.action;
   if (action === "admin-diagnostics") return loadAdminDiagnostics();
-  if (action === "admin-export" && isAdmin() && adminDiagnosticsData) return downloadBlob(JSON.stringify({ ...adminDiagnosticsData, client: consoleClientState(), history: adminDiagnosticsHistory }, null, 2), "application/json", `diagnostic-${Date.now()}.json`);
+  if (action === "admin-metrics") return loadPrometheusMetrics();
+  if (action === "admin-export" && isAdmin() && adminDiagnosticsData) return downloadBlob(JSON.stringify({ ...adminDiagnosticsData, client: consoleClientState(), history: adminDiagnosticsHistory, prometheus: prometheusData, prometheusHistory }, null, 2), "application/json", `diagnostic-${Date.now()}.json`);
   if (action === "go") {
     if (button.dataset.view === "admin-console") {
       if (!isAdmin()) return toast("Accès réservé aux administrateurs");
