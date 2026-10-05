@@ -99,6 +99,9 @@
           </span>
           <span class="article-entry-arrow" aria-hidden="true">›</span>
         </button>
+        <button class="card article-entry-tile" type="button" data-action="go" data-view="scan" data-batch-entry="true">
+          <span class="article-entry-tile-icon">${photoIcon()}</span><span><h3>Ajouter un lot d’étiquettes</h3><p>Choisir jusqu’à 25 photos, les analyser puis compléter chaque article.</p></span><span class="article-entry-arrow">›</span>
+        </button>
         <button class="card article-entry-tile" type="button" data-action="go" data-view="manual">
           <span class="article-entry-tile-icon">${manualIcon()}</span>
           <span>
@@ -174,6 +177,7 @@
 
     // Le gestionnaire principal ouvre la vue photo avant que l’événement atteigne
     // document. Le clic sur le champ fichier reste donc dans le même geste utilisateur.
+    if (tile.dataset.batchEntry) { document.querySelector("#batchPhotosInput")?.click(); return; }
     if (!openCamera()) {
       window.requestAnimationFrame(openCamera);
     }

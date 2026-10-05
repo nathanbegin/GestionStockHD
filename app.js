@@ -55,6 +55,8 @@ let userDirectory = [];
 let currentView = "dashboard";
 let editingId = null;
 let scanDraft = emptyScanDraft();
+let labelBatch = null;
+const MAX_BATCH_PHOTOS = 25;
 let stockPhotoDraft = emptyStockPhotoDraft();
 let filters = { search: "", listId: "all", departmentId: "all", status: "open", priority: "all", employeeId: "all" };
 let assignmentFilter = "unassigned";
@@ -524,6 +526,7 @@ function switchAuthTab(tab) {
 }
 
 function setView(view) {
+  if (currentView === "scan") rememberBatchForm();
   const previousView = currentView;
   currentView = view;
   formDirty = false;
@@ -675,14 +678,76 @@ function renderManual() {
   const item = editingId ? state.items.find(x => x.id === editingId) : null;
   return `<section class="section"><div class="section-head"><div><h2>${item ? "Modifier l’article" : "Nouvel article"}</h2><p class="muted">Saisie manuelle, attribution et photo de l’emplacement.</p></div></div>${itemForm(item || {})}</section>`;
 }
+function renderLabelBatch() {
+  const batch = labelBatch;
+  const completed = batch.entries.filter(entry => entry.saved).length;
+  return `<section class="section"><div class="card"><h2>Lot d’étiquettes</h2>
+    <p class="muted" id="batchProgress">${batch.busy ? batch.progress : `${completed} ajouté(s) sur ${batch.entries.length} · ${batch.calls}/25 appels IA`}</p>
+    ${batch.busy ? "" : `<div class="button-row">${batch.entries.map((entry, index) => `<button type="button" class="button compact" data-action="batch-open" data-index="${index}" ${entry.saved ? "disabled" : ""}>${index + 1}${entry.saved ? " ✓" : entry.error ? " ⚠" : ""}</button>`).join("")}</div><p class="small muted">Choisis une photo pour compléter les champs. Les articles sont enregistrés un à un. Ce lot reste disponible pendant cette session.</p><button class="button" data-action="batch-end">Terminer le lot</button>`}
+  </div></section>`;
+}
+function rememberBatchForm() {
+  if (!labelBatch || labelBatch.busy) return;
+  const entry = labelBatch.entries[labelBatch.index];
+  const form = document.querySelector("#scanForm");
+  if (!entry || entry.saved || !form) return;
+  const data = new FormData(form);
+  entry.fields = Object.fromEntries(data);
+  entry.fields.assignedEmployeeIds = data.getAll("assignedEmployeeIds");
+  form.querySelectorAll('input[type="checkbox"][name]').forEach(input => { if (input.name !== "assignedEmployeeIds") entry.fields[input.name] = input.checked; });
+  entry.stockPhoto = { ...stockPhotoDraft };
+}
+function openBatchEntry(index) {
+  rememberBatchForm();
+  labelBatch.index = index;
+  const entry = labelBatch.entries[index];
+  scanDraft = entry.draft;
+  stockPhotoDraft = entry.stockPhoto || emptyStockPhotoDraft();
+  render();
+}
+async function startLabelBatch(files) {
+  if (labelBatch) return toast("Termine le lot actuel avant d’en commencer un autre");
+  if (!files.length || files.length > MAX_BATCH_PHOTOS) return toast("Choisis entre 1 et 25 photos maximum");
+  if (files.some(file => !file.type.startsWith("image/"))) return toast("Choisis uniquement des images");
+  const batch = { entries: [], index: 0, calls: 0, busy: true, progress: "Préparation des photos…" };
+  labelBatch = batch;
+  render();
+  for (let index = 0; index < files.length; index++) {
+    const entry = { draft: emptyScanDraft(), fields: {}, saved: false, error: "" };
+    batch.entries.push(entry);
+    batch.progress = `Analyse ${index + 1} sur ${files.length} · ${batch.calls}/25 appels IA`;
+    const progress = document.querySelector("#batchProgress");
+    if (progress) progress.textContent = batch.progress;
+    try {
+      entry.draft.photo = await compressImage(files[index], 1280, .75);
+      batch.calls++;
+      const data = await apiRequest("/api/analyze", { method: "POST", body: { image: entry.draft.photo, departments: state.departments.map(entry => entry.name) } });
+      Object.assign(entry.draft, {
+        sku: normalizeRequiredSku(data.sku) || normalizeRequiredSku(data.visibleText) || normalizeRequiredSku(data.summary) || "",
+        name: data.productName || "", departmentId: analyzedDepartmentId(data), barcode: data.barcode || "",
+        confidence: typeof data.confidence === "number" ? data.confidence : .5,
+        rawText: data.summary || data.visibleText || "Étiquette analysée"
+      });
+    } catch (error) { entry.error = error.message; }
+  }
+  batch.busy = false;
+  scanDraft = batch.entries[0].draft;
+  stockPhotoDraft = emptyStockPhotoDraft();
+  if (currentView === "scan") render();
+  toast("Lot analysé — complète chaque article avant de l’ajouter");
+}
 function renderScan() {
-  const draftItem = { sku: scanDraft.sku, name: scanDraft.name, departmentId: scanDraft.departmentId, quantity: 1, priority: "medium", assignedEmployeeIds: [] };
-  return `<section class="section"><div class="section-head"><div><h2>Lire une étiquette</h2><p class="muted">Prends une nouvelle photo ou sélectionne une image déjà enregistrée.</p></div></div>
-    <div class="card"><div class="scan-zone"><span class="scan-icon">▣</span><strong>${scanDraft.photo ? "Remplacer la photo" : "Ajouter une photo d’étiquette"}</strong><span class="small muted">Les deux options sont disponibles dans la PWA.</span><div class="photo-choice-grid"><label class="button primary photo-choice" for="cameraInput">📷 Prendre une photo</label><label class="button photo-choice" for="galleryInput">🖼 Choisir une photo existante</label></div><input id="cameraInput" type="file" accept="image/*" capture="environment"><input id="galleryInput" type="file" accept="image/*"></div>
-      ${scanDraft.photo ? `<div class="preview"><img src="${scanDraft.photo}" alt="Aperçu de l’étiquette"></div><div class="button-row top-gap"><button class="button primary" data-action="analyze-photo">Analyser l’étiquette</button><button class="button" data-action="clear-photo">Effacer</button></div>` : ""}
+  if (labelBatch?.busy) return renderLabelBatch();
+  const entry = labelBatch?.entries[labelBatch.index];
+  const draftItem = { quantity: 1, priority: "medium", assignedEmployeeIds: [], ...scanDraft, ...entry?.fields };
+  const duplicate = scanDraft.sku && state.items.some(item => searchableSku(item.sku) === searchableSku(scanDraft.sku));
+  return `${labelBatch ? renderLabelBatch() : ""}<section class="section"><div class="section-head"><div><h2>Lire une étiquette</h2><p class="muted">Prends une nouvelle photo ou sélectionne une image déjà enregistrée.</p></div></div>
+    <div class="card"><div class="scan-zone" ${labelBatch ? "hidden" : ""}><span class="scan-icon">▣</span><strong>${scanDraft.photo ? "Remplacer la photo" : "Ajouter une photo d’étiquette"}</strong><span class="small muted">Les deux options sont disponibles dans la PWA.</span><div class="photo-choice-grid"><label class="button primary photo-choice" for="cameraInput">📷 Prendre une photo</label><label class="button photo-choice" for="galleryInput">🖼 Choisir une photo existante</label></div><label class="button photo-choice" for="batchPhotosInput">🖼 Ajouter plusieurs étiquettes (25 max)</label><input id="batchPhotosInput" type="file" accept="image/*" multiple hidden><input id="cameraInput" type="file" accept="image/*" capture="environment"><input id="galleryInput" type="file" accept="image/*"></div>
+      ${scanDraft.photo ? `<div class="preview"><img src="${scanDraft.photo}" alt="Aperçu de l’étiquette"></div><div class="button-row top-gap"><button class="button primary" data-action="analyze-photo">Analyser l’étiquette</button>${labelBatch ? "" : `<button class="button" data-action="clear-photo">Effacer</button>`}</div>` : ""}
+      ${entry?.error ? `<p class="notice">Analyse impossible : ${escapeHTML(entry.error)}. Complète les champs manuellement.</p>` : ""}${duplicate ? `<p class="notice">Ce numéro existe déjà dans les articles. Vérifie avant de l’ajouter.</p>` : ""}
       ${scanDraft.confidence !== null ? `<div class="analysis-box"><div class="button-row"><span class="confidence">Confiance ${Math.round(scanDraft.confidence * 100)} %</span>${scanDraft.barcode ? `<span class="tag">Code-barres ${escapeHTML(scanDraft.barcode)}</span>` : ""}</div><p class="small muted">${escapeHTML(scanDraft.rawText || "Résultat extrait. Vérifie les champs ci-dessous.")}</p></div>` : ""}
     </div></section>
-    <section class="section"><div class="section-head"><div><h2>Résultat à confirmer</h2><p class="muted">Le numéro est conservé sous la forme 1001 123 456.</p></div></div><form id="scanForm" class="card"><div class="form-grid">${commonItemFields(draftItem)}</div><div class="form-actions"><button class="button primary" type="submit">Ajouter à la liste</button></div></form></section>`;
+    <section class="section"><div class="section-head"><div><h2>Résultat à confirmer</h2><p class="muted">Le numéro est conservé sous la forme 1001 123 456.</p></div></div><form id="scanForm" class="card"><div class="form-grid">${commonItemFields(draftItem)}</div><div class="form-actions"><button class="button primary" type="submit">${labelBatch ? "Ajouter et passer au suivant" : "Ajouter à la liste"}</button></div></form></section>`;
 }
 function searchableSku(value) { return String(value || "").replace(/\D/g, ""); }
 function filteredItems() {
@@ -1153,6 +1218,7 @@ async function exportPickupPdf(id, button) {
   }
 }
 async function handleLabelPhoto(file) {
+  if (labelBatch) return toast("Termine le lot avant de remplacer une photo");
   if (!file?.type?.startsWith("image/")) return toast("Choisis une image valide");
   try {
     scanDraft.photo = await compressImage(file, 1280, .75);
@@ -1240,6 +1306,11 @@ function analyzedDepartmentId(data, departments = state.departments) {
   return name ? departments.find(entry => normalizeName(entry.name) === name)?.id || "" : "";
 }
 async function analyzePhoto(btn) {
+  if (labelBatch) {
+    if (labelBatch.calls >= MAX_BATCH_PHOTOS) return toast("Limite de 25 appels IA atteinte pour ce lot — complète manuellement");
+    rememberBatchForm();
+    labelBatch.calls++;
+  }
   if (!scanDraft.photo) return toast("Ajoute d’abord une photo");
   btn.disabled = true;
   btn.textContent = "Analyse…";
@@ -1252,6 +1323,7 @@ async function analyzePhoto(btn) {
     scanDraft.barcode = data.barcode || scanDraft.barcode;
     scanDraft.confidence = typeof data.confidence === "number" ? data.confidence : .5;
     scanDraft.rawText = data.summary || data.visibleText || "Étiquette analysée";
+    if (labelBatch) { const entry = labelBatch.entries[labelBatch.index]; entry.error = ""; Object.assign(entry.fields, { sku: scanDraft.sku, name: scanDraft.name, departmentId: scanDraft.departmentId }); }
     render();
     toast(detectedSku ? "Numéro détecté — vérifie le résultat" : "Analyse terminée — numéro à confirmer manuellement");
   } catch (error) {
@@ -1540,6 +1612,16 @@ els.appMain.addEventListener("submit", async event => {
       upsertItem(item);
       const wasEdit = Boolean(editingId);
       editingId = null;
+      if (form.id === "scanForm" && labelBatch) {
+        labelBatch.entries[labelBatch.index].saved = true;
+        labelBatch.entries[labelBatch.index].draft.photo = null;
+        const next = labelBatch.entries.findIndex(entry => !entry.saved);
+        stockPhotoDraft = emptyStockPhotoDraft();
+        formDirty = false;
+        if (next >= 0) { labelBatch.index = next; scanDraft = labelBatch.entries[next].draft; stockPhotoDraft = labelBatch.entries[next].stockPhoto || emptyStockPhotoDraft(); render(); toast("Article ajouté — photo suivante"); }
+        else { labelBatch = null; scanDraft = emptyScanDraft(); setView("lists"); toast("Tous les articles du lot ont été ajoutés"); }
+        return;
+      }
       scanDraft = emptyScanDraft();
       stockPhotoDraft = emptyStockPhotoDraft();
       toast(wasEdit ? "Article modifié et envoyé au cloud" : "Article ajouté et envoyé au cloud");
@@ -1581,6 +1663,7 @@ els.appMain.addEventListener("submit", async event => {
 
 els.appMain.addEventListener("change", async event => {
   const target = event.target;
+  if (target.id === "batchPhotosInput" && target.files?.length) return startLabelBatch([...target.files]);
   if (["cameraInput", "galleryInput"].includes(target.id) && target.files?.[0]) await handleLabelPhoto(target.files[0]);
   if (["stockCameraInput", "stockGalleryInput"].includes(target.id) && target.files?.[0]) await handleStockPhoto(target.files[0]);
   if (target.classList.contains("location-barcode-input") && target.files?.[0]) {
@@ -1601,6 +1684,7 @@ els.appMain.addEventListener("change", async event => {
     if (target.checked) visible.forEach(item => selectedIds.add(item.id)); else visible.forEach(item => selectedIds.delete(item.id));
     render();
   }
+  if (target.closest("#scanForm")) rememberBatchForm();
   if (target.matches('#scanForm [name="departmentId"]')) scanDraft.departmentId = target.value;
   const filterMap = { filterList: "listId", filterDepartment: "departmentId", filterEmployee: "employeeId", filterStatus: "status", filterPriority: "priority" };
   if (filterMap[target.id]) { filters[filterMap[target.id]] = target.value; render(); }
@@ -1624,6 +1708,7 @@ els.appMain.addEventListener("input", event => {
     return;
   }
   if (target.closest("form")) formDirty = true;
+  if (target.closest("#scanForm")) rememberBatchForm();
 });
 
 els.appMain.addEventListener("click", async event => {
@@ -1697,6 +1782,12 @@ els.appMain.addEventListener("click", async event => {
   if (action === "export-pickup-pdf") return exportPickupPdf(button.dataset.id, button);
   if (action === "delete-list") return deleteManaged("list", button.dataset.id);
   if (action === "delete-department") return deleteManaged("department", button.dataset.id);
+  if (action === "batch-open" && labelBatch && !labelBatch.busy) return openBatchEntry(Number(button.dataset.index));
+  if (action === "batch-end" && labelBatch && !labelBatch.busy) {
+    if (labelBatch.entries.some(entry => !entry.saved) && !confirm("Terminer le lot? Les photos non ajoutées seront abandonnées.")) return;
+    labelBatch = null; scanDraft = emptyScanDraft(); stockPhotoDraft = emptyStockPhotoDraft(); return setView("lists");
+  }
+  if (action === "clear-photo" && labelBatch) return toast("Termine le lot pour effacer les photos");
   if (action === "clear-photo") { scanDraft = emptyScanDraft(); return render(); }
   if (action === "analyze-photo") return analyzePhoto(button);
   if (action === "remove-stock-photo") {
