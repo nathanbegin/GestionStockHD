@@ -681,7 +681,7 @@ function renderManual() {
 function renderLabelBatch() {
   const batch = labelBatch;
   const completed = batch.entries.filter(entry => entry.saved).length;
-  return `<section class="section"><div class="card"><h2>Lot d’étiquettes</h2>
+  return `<section class="section" data-label-batch-section><div class="card"><h2>Lot d’étiquettes</h2>
     <p class="muted" id="batchProgress">${batch.busy ? batch.progress : `${completed} ajouté(s) sur ${batch.entries.length} · ${batch.calls}/25 appels IA`}</p>
     ${batch.busy ? "" : `<div class="button-row">${batch.entries.map((entry, index) => `<button type="button" class="button compact" data-action="batch-open" data-index="${index}" ${entry.saved ? "disabled" : ""}>${index + 1}${entry.saved ? " ✓" : entry.error ? " ⚠" : ""}</button>`).join("")}</div><p class="small muted">Choisis une photo pour compléter les champs. Les articles sont enregistrés un à un. Ce lot reste disponible pendant cette session.</p><button class="button" data-action="batch-end">Terminer le lot</button>`}
   </div></section>`;

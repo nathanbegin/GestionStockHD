@@ -116,6 +116,7 @@
       const preview = sourceCard.querySelector(":scope > .preview");
       const actions = sourceCard.querySelector(":scope > .button-row.top-gap");
       const analysis = sourceCard.querySelector(":scope > .analysis-box");
+      sourceCard.querySelectorAll(":scope > .notice").forEach(notice => feedback.append(notice));
       if (preview) feedback.append(preview);
       if (actions) {
         actions.classList.add("sku-ai-analysis-actions");
@@ -179,6 +180,12 @@
     }
     helper.innerHTML = `<span>10 chiffres · <strong>1000 000 000</strong></span><span>Caméra ou photo = analyse IA automatique</span>`;
 
+    const batchSection = document.querySelector("[data-label-batch-section]");
+    if (batchSection) {
+      const panel = batchSection.querySelector(".card");
+      if (panel) { panel.classList.add("sku-ai-batch-panel"); fieldLabel.prepend(panel); }
+      batchSection.remove();
+    }
     movePhotoFeedback(sourceSection, fieldLabel);
     form.closest(".section")?.classList.add("sku-ai-result-section");
     fieldLabel.dataset.skuAiReady = "true";
@@ -208,6 +215,7 @@
 
     grid.dataset.unifiedEntry = "true";
     grid.classList.add("unified-article-entry-grid");
+    const batchTile = grid.querySelector("[data-batch-entry]");
     grid.innerHTML = `
       <button class="card article-entry-tile unified-entry-tile" type="button" data-unified-article-entry>
         <span class="article-entry-tile-icon">${ADD_ICON}</span>
@@ -218,6 +226,7 @@
         </span>
         <span class="article-entry-arrow" aria-hidden="true">›</span>
       </button>`;
+    if (batchTile) grid.append(batchTile);
   }
 
   function harmonizeDashboardActions() {
