@@ -13,7 +13,7 @@ const APPROVAL_LABELS = { pending: "En attente", approved: "Approuvé", rejected
 const ROLE_RANK = { employee: 1, supervisor: 2, admin: 3 };
 const DEFAULT_DEPARTMENTS = ["Quincaillerie", "Peinture", "Électricité", "Plomberie", "Jardinage", "Matériaux", "Cour extérieure"];
 const AUTOSYNC_DELAY = 650;
-const POLL_INTERVAL = 15000;
+const POLL_INTERVAL = 60000;
 const DIRECTORY_INTERVAL = 45000;
 const TOUR_SWIPE_MIN_DISTANCE = 56;
 const TOUR_SWIPE_MAX_DURATION = 900;
@@ -85,6 +85,10 @@ let pollTimer = null;
 let directoryTimer = null;
 let autoSyncTimer = null;
 let syncInFlight = null;
+const SYNC_DIRTY_KEY = "restock_sync_dirty_v1";
+let localSyncDirty = localStorage.getItem(SYNC_DIRTY_KEY) !== "false";
+let localSyncGeneration = 0;
+let cloudRevision = null;
 let syncAgain = false;
 let syncAgainBroadcast = false;
 let syncMode = navigator.onLine ? "local" : "offline";
@@ -249,7 +253,12 @@ function loadState() {
 function saveState({ touch = true, sync = true } = {}) {
   if (touch) state.meta.updatedAt = nowIso();
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-  if (sync) scheduleAutoSync();
+  if (sync) {
+    localSyncDirty = true;
+    localSyncGeneration++;
+    localStorage.setItem(SYNC_DIRTY_KEY, "true");
+    scheduleAutoSync();
+  }
 }
 function loadPendingStatusChanges() {
   try {
@@ -1540,11 +1549,22 @@ async function syncNow({ silent = false, broadcast = true, source = "manual" } =
   syncMode = "working";
   updateSyncIndicator();
   applyPendingStatusChanges();
+  const sentGeneration = localSyncGeneration;
+  const uploading = localSyncDirty || pendingStatusChanges.length > 0;
   const sentPendingStatusIds = new Set(pendingStatusChanges.map(change => change.id));
   syncInFlight = (async () => {
     try {
-      const data = await apiRequest("/api/sync", { method: "POST", body: { snapshot: state } });
-      state = sanitizeState(data.snapshot);
+      const data = uploading
+        ? await apiRequest("/api/sync", { method: "POST", body: { snapshot: state } })
+        : await apiRequest(`/api/sync${cloudRevision ? `?since=${encodeURIComponent(cloudRevision)}` : ""}`);
+      // Keep edits made while the request was in flight. The next upload merges them.
+      if (localSyncGeneration !== sentGeneration) { syncAgain = true; return state; }
+      cloudRevision = data.revision || null;
+      if (data.snapshot) state = sanitizeState(data.snapshot);
+      if (uploading) {
+        localSyncDirty = false;
+        localStorage.setItem(SYNC_DIRTY_KEY, "false");
+      }
       acknowledgePendingStatusChanges(sentPendingStatusIds);
       applyPendingStatusChanges();
       mergeDirectoryIntoEmployees();
@@ -1552,9 +1572,9 @@ async function syncNow({ silent = false, broadcast = true, source = "manual" } =
       saveState({ touch: false, sync: false });
       if (pendingStatusChanges.length) syncAgain = true;
       syncMode = pendingStatusChanges.length ? "pending" : (realtimeActive ? "realtime" : "cloud");
-      if (!formDirty && !["scan", "manual"].includes(currentView)) render({ soft: true });
+      if (!data.unchanged && !formDirty && !["scan", "manual"].includes(currentView)) render({ soft: true });
       else updateSyncIndicator();
-      if (broadcast && realtimeActive && realtimeChannel) {
+      if (uploading && data.changed !== false && broadcast && realtimeActive && realtimeChannel) {
         await realtimeChannel.send({ type: "broadcast", event: "state-changed", payload: { clientId, updatedAt: state.meta.updatedAt } });
       }
       if (!silent) toast("Synchronisation terminée");

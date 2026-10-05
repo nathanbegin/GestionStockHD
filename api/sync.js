@@ -258,13 +258,24 @@ function mergeSnapshots(local, cloud) {
 }
 
 export default async function handler(request, response) {
-  if (request.method !== "POST") return json(response, 405, { error: "Méthode non permise" });
+  if (!["GET", "POST"].includes(request.method)) return json(response, 405, { error: "Méthode non permise" });
   try {
     const { supabase, profile, user } = await getAuthContext(request);
+    response.setHeader("Cache-Control", "no-store");
+    if (request.method === "GET") {
+      const { data: row, error } = await supabase.from("app_state").select("updated_at").eq("id", "default").maybeSingle();
+      if (error) throw error;
+      if (!row) return json(response, 200, { unchanged: true, revision: null });
+      if (request.query?.since === row.updated_at) return json(response, 200, { unchanged: true, revision: row.updated_at });
+      // Read data and its revision together, so a concurrent write cannot be missed.
+      const { data: current, error: fetchError } = await supabase.from("app_state").select("snapshot,updated_at").eq("id", "default").maybeSingle();
+      if (fetchError) throw fetchError;
+      return json(response, 200, { snapshot: current?.snapshot, revision: current?.updated_at || null });
+    }
     const local = request.body?.snapshot;
     if (!local || local.version !== 1 || !Array.isArray(local.items)) return json(response, 400, { error: "Données de synchronisation invalides" });
 
-    const { data: rows, error: readError } = await supabase.from("app_state").select("snapshot").eq("id", "default");
+    const { data: rows, error: readError } = await supabase.from("app_state").select("snapshot,updated_at").eq("id", "default");
     if (readError) throw readError;
     const cloud = rows?.[0]?.snapshot || null;
     const needsDepartmentMigration = Number(cloud?.meta?.departmentDefaultsVersion || 0) < DEFAULT_DEPARTMENTS_VERSION;
@@ -280,10 +291,15 @@ export default async function handler(request, response) {
     const approvedUserIds = (approvedProfiles || []).map(row => row.id);
     const cleaned = removeInactiveAccountEmployees(withDefaultDepartments, approvedUserIds);
 
+    const content = value => JSON.stringify({ ...value, meta: { ...value?.meta, updatedAt: null, lastSyncAt: null } });
+    if (cloud && content(cloud) === content(cleaned)) {
+      return json(response, 200, { snapshot: cloud, revision: rows[0].updated_at, changed: false });
+    }
+    const revision = new Date().toISOString();
     const { error: writeError } = await supabase.from("app_state").upsert({
       id: "default",
       snapshot: cleaned,
-      updated_at: new Date().toISOString()
+      updated_at: revision
     });
     if (writeError) throw writeError;
 
@@ -301,7 +317,7 @@ export default async function handler(request, response) {
       }
     }
 
-    return json(response, 200, { snapshot: cleaned });
+    return json(response, 200, { snapshot: cleaned, revision, changed: true });
   } catch (error) {
     return sendError(response, error, "Erreur de synchronisation");
   }
