@@ -532,4 +532,6 @@ details summary { cursor: pointer; color: var(--brand-2); font-weight: 750; }
 .console-table th, .console-table td { text-align: left; vertical-align: top; padding: 8px 5px; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .console-table th { width: 43%; }
 .admin-console .card { min-width: 0; }
-.admin-console .settings-grid { align-items: start; }
+.console-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; align-items: start; }
+.console-quota progress { display: block; width: 100%; height: 14px; accent-color: var(--brand, #f96302); }
+@media (max-width: 699px) { .console-grid { grid-template-columns: minmax(0, 1fr); } }
