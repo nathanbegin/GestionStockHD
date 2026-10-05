@@ -545,3 +545,28 @@ details summary { cursor: pointer; color: var(--brand-2); font-weight: 750; }
     margin-right: 0;
   }
 }
+
+/* Retour occupe sa propre ligne, avant l'identité et le titre de la vue. */
+.app-brand-heading {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 2px 10px;
+  padding-left: 0;
+}
+.app-brand-heading .app-brand-logo {
+  position: static;
+  grid-column: 1;
+  grid-row: 2 / 4;
+  align-self: center;
+}
+.app-brand-heading > .eyebrow { grid-column: 2; grid-row: 2; margin: 0; }
+.app-brand-heading > #pageTitle { grid-column: 2; grid-row: 3; margin: 0; }
+.app-brand-heading > #appBackButton.app-back-button {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  justify-self: start;
+  margin-bottom: 8px;
+}
+@media (max-width: 699px) {
+  .app-brand-heading { grid-template-columns: 34px minmax(0, 1fr); gap: 2px 8px; }
+}
